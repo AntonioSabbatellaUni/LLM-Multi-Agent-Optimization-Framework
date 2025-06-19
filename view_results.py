@@ -19,14 +19,35 @@ def find_latest_results():
         for item in os.listdir(outputs_dir):
             item_path = os.path.join(outputs_dir, item)
             if os.path.isdir(item_path) and '_' in item:
-                # Check if it contains results
-                results_file = os.path.join(item_path, 'llm_optimization_results.json')
-                if os.path.exists(results_file):
-                    folders.append((item, item_path))
+                # Check if it contains results (multiple possible file names)
+                possible_files = [
+                    'botorch_optimization_results.json',
+                    'llm_optimization_results.json', 
+                    'final_optimization_results.json'
+                ]
+                results_file = None
+                for filename in possible_files:
+                    candidate_path = os.path.join(item_path, filename)
+                    if os.path.exists(candidate_path):
+                        results_file = candidate_path
+                        break
+                
+                if results_file:
+                    # Get folder modification time for sorting
+                    mod_time = os.path.getmtime(item_path)
+                    folders.append((item, item_path, results_file, mod_time))
     
     if not folders:
         print("❌ No results found. Please run the optimization first.")
-        return None, None
+        return None, None, None
+    
+    # Sort by modification time (most recent first)
+    folders.sort(key=lambda x: x[3], reverse=True)
+    latest_folder, latest_path, results_file, _ = folders[0]
+    
+    print(f"📁 Using latest results: {latest_folder}")
+    print(f"📄 Results file: {os.path.basename(results_file)}")
+    return latest_folder, latest_path, results_file
     
     # Sort by folder name (timestamp) and get the latest
     folders.sort(reverse=True)
@@ -39,12 +60,12 @@ def show_results_summary():
     """Display a summary of the optimization results."""
     
     # Find latest results
-    latest_folder, latest_path = find_latest_results()
+    latest_folder, latest_path, results_file = find_latest_results()
     if latest_path is None:
         return None
     
     # Load results
-    with open(f'{latest_path}/llm_optimization_results.json', 'r') as f:
+    with open(results_file, 'r') as f:
         results = json.load(f)
     
     solutions = results['pareto_solutions']
@@ -90,12 +111,12 @@ def plot_simplified_pareto():
     """Create a simplified Pareto front plot."""
     
     # Find latest results
-    latest_folder, latest_path = find_latest_results()
+    latest_folder, latest_path, results_file = find_latest_results()
     if latest_path is None:
         return
     
     # Load results
-    with open(f'{latest_path}/llm_optimization_results.json', 'r') as f:
+    with open(results_file, 'r') as f:
         results = json.load(f)
     
     solutions = results['pareto_solutions']

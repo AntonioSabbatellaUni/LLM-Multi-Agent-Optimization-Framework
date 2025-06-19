@@ -1,0 +1,61 @@
+# This file contains all experimental settings for reproducible runs
+
+# Optimization Parameters
+optimization:
+  n_initial: 15        # Number of initial random points
+  n_iterations: 1     # Number of Bayesian Optimization iterations
+  batch_size: 5        # Number of candidates per iteration (q)
+  
+# Model Parameters
+model:
+  num_restarts: 20     # Number of restarts for acquisition optimization
+  raw_samples: 1024    # Number of raw samples for acquisition optimization
+  mc_samples: 512      # Number of Monte Carlo samples for acquisition
+
+# Bounds and Reference Point
+bounds:
+  lower: 0.0          # Lower bound for all dimensions
+  upper: 1.0          # Upper bound for all dimensions
+
+reference_point:
+  performance: -0.1   # Reference point for performance (negative because we maximize)
+  cost: 1.1          # Reference point for cost (positive because we minimize)
+
+# Agent Configuration
+agents:
+  n_agents: 3
+  roles: ["MMLU", "HumanEval", "MATH"]
+  role_to_feature:
+    MMLU: 0
+    HumanEval: 1
+    MATH: 3
+
+# Features to Use
+features:
+  - "MMLU"
+  - "HumanEval" 
+  - "GSM8K"
+  - "MATH"
+  - "MT_bench"
+  - "Costo_Input_1M"
+  - "Costo_Output_1M"
+
+# Data Configuration
+data:
+  input_file: "data/llm_data.csv"
+  
+# Output Configuration
+output:
+  save_checkpoints: true    # Save intermediate results at each iteration
+  checkpoint_frequency: 1   # Save every N iterations
+  
+# Device Configuration
+device:
+  use_cuda: true           # Use GPU if available
+  dtype: "double"          # Precision: "float" or "double"
+
+# Experiment Metadata
+experiment:
+  name: "BoTorch_Multi_Objective_LLM"
+  description: "Bayesian Optimization for LLM selection using qLogEHVI"
+  version: "1.0"

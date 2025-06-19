@@ -1,7 +1,12 @@
 # LLM Multi-Agent Optimization Framework
 
 ## 🎯 Overview
-This framework implements a sophisticated multi-objective Bayesian optimization approach to find optimal trade-offs between **Performance** and **Cost** when assigning Large Language Models (LLMs) to agents in a multi-agent system.
+This framework implements sophisticated multi-objective optimization approaches to find optimal trade-offs between **Performance** and **Cost** when assigning Large Language Models (LLMs) to agents in a multi-agent system.
+
+### 🔬 Optimization Methods Available:
+- **Heuristic Multi-Objective**: Fast exploration using genetic algorithm-style approach
+- **BoTorch Bayesian Optimization**: True Bayesian optimization with Gaussian Process models
+- **Iterative Convergence**: Analysis of optimization convergence patterns
 
 ## 📁 Project Structure
 
@@ -11,67 +16,180 @@ LLM Multi-Agent Optimization Framework/
 │   └── llm_data.csv                    # 24 LLMs with performance & cost data
 ├── 📁 outputs/                         # All generated results (timestamped folders)
 │   ├── jun_19_11_53/                  # Example: Basic optimization run
-│   ├── jun_19_11_54/                  # Example: Iterative optimization run
+│   ├── jun_19_12_45_botorch/           # Example: BoTorch optimization run
 │   └── [other timestamped runs...]
 ├── 🐍 Core Python Files:
 │   ├── data_processor_v2.py           # Data loading & preprocessing (main)
 │   ├── data_processor.py              # Legacy data processor (PyTorch)
-│   ├── basic_optimization.py          # Multi-objective optimization engine
+│   ├── basic_optimization.py          # Heuristic multi-objective optimization
+│   ├── botorch_optimization.py        # Bayesian optimization with BoTorch
 │   ├── iterative_optimization.py      # Convergence tracking optimizer
-│   ├── run_full_optimization.py       # Main optimization runner
+│   ├── run_full_optimization.py       # Heuristic optimization runner
+│   ├── run_botorch_optimization.py    # BoTorch optimization runner (legacy)
+│   ├── run_botorch_optimization_v2.py # BoTorch with YAML config & checkpoints
 │   ├── run_iterative_optimization.py  # Convergence analysis runner
+│   ├── monitor_progress.py            # Real-time optimization monitoring tool
 │   └── view_results.py               # Results visualization tool
+├── 📋 config.yaml                     # Configuration file for BoTorch optimization
+├── 📋 requirements.txt                 # Python package dependencies
+├── 📋 .gitignore                      # Git ignore rules
 └── 📋 README.md                       # This documentation
 ```
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Prerequisites & Installation
 ```bash
-# Ensure you have the required packages
-pip install pandas numpy matplotlib
+# Install required packages
+pip install -r requirements.txt
 ```
 
-### Running the Optimization
+**Required packages:**
+- `pandas`, `numpy` - Data processing & numerical computing
+- `matplotlib` - Visualization
+- `torch` - PyTorch for tensor operations
+- `botorch`, `gpytorch` - Bayesian Optimization & Gaussian Processes
+- `pyyaml` - YAML configuration file support
 
-1. **Basic Multi-Objective Optimization**:
-   ```bash
-   cd "LLM Multi-Agent Optimization Framework"
-   python run_full_optimization.py
-   ```
+### Running Different Optimization Methods
 
-2. **Iterative Optimization with Convergence Tracking**:
-   ```bash
-   cd "LLM Multi-Agent Optimization Framework"
-   python run_iterative_optimization.py
-   ```
+#### 1. 🔥 **BoTorch Bayesian Optimization (Recommended)**
+Uses true Bayesian optimization with Gaussian Process models and qLogEHVI acquisition function.
 
-3. **View Results**:
-   ```bash
-   cd "LLM Multi-Agent Optimization Framework"
-   python view_results.py
-   ```
+```bash
+# Configure optimization in config.yaml first, then run:
+python run_botorch_optimization_v2.py
+```
+
+**Features:**
+- ✅ **YAML Configuration**: All parameters in `config.yaml`
+- ✅ **Incremental Checkpoints**: Progress saved at each iteration
+- ✅ **Reproducible**: Configuration copied to output folder
+- ✅ **Real-time Monitoring**: Use `monitor_progress.py` to track progress
+
+**Monitor progress in another terminal:**
+```bash
+python monitor_progress.py  # Auto-detects latest run
+# or specify directory:
+python monitor_progress.py --dir outputs/jun_19_12_45_botorch
+```
+
+#### 2. 🏃‍♂️ **Basic Multi-Objective Optimization (Fast)**:
+```bash
+python run_full_optimization.py
+```
+
+#### 3. 📈 **Iterative Analysis with Convergence Tracking**:
+```bash
+python run_iterative_optimization.py
+```
+
+## ⚙️ Configuration
+
+### BoTorch Configuration (config.yaml)
+
+The `config.yaml` file controls all BoTorch optimization parameters:
+
+```yaml
+# Optimization Parameters
+optimization:
+  n_initial: 10        # Initial random points
+  n_iterations: 15     # BO iterations  
+  batch_size: 3        # Candidates per iteration
+
+# Model Parameters  
+model:
+  num_restarts: 20     # Acquisition optimization restarts
+  raw_samples: 1024    # Raw samples for acquisition
+  mc_samples: 512      # Monte Carlo samples
+
+# Reference point for hypervolume calculation
+reference_point:
+  performance: -0.1    # Below worst performance
+  cost: 1.1           # Above worst cost
+```
+
+**Key Parameters to Adjust:**
+- `n_iterations`: More iterations = better results but slower
+- `batch_size`: More candidates per iteration = faster convergence
+- `n_initial`: More initial points = better initial coverage
 
 ## 📊 Generated Outputs
 
 Each run creates a timestamped folder in `outputs/` with:
 
-### Basic Optimization (`run_full_optimization.py`):
-- `pareto_optimization.png` - Pareto front visualization
-- `llm_optimization_results.json` - Detailed optimization results
-- `README.md` - Summary report
+### BoTorch Optimization Outputs:
+```
+outputs/jun_19_12_45_botorch/
+├── config_used.yaml                    # Configuration used for this run
+├── checkpoint_iter_000.json            # Initial state (iteration 0)  
+├── checkpoint_iter_001.json            # After iteration 1
+├── checkpoint_iter_002.json            # After iteration 2
+├── ...                                 # One checkpoint per iteration
+├── botorch_pareto_optimization.png     # Pareto front visualization
+├── botorch_optimization_results.json   # Detailed analysis results
+└── botorch_raw_results.json           # Raw BoTorch tensor data
+```
 
-### Iterative Optimization (`run_iterative_optimization.py`):
-- `convergence_analysis.png` - 4-panel convergence analysis
-- `pareto_3d_evolution.png` - 3D Pareto front evolution
-- `final_pareto_front.png` - Final optimization results
-- `optimization_summary.png` - Summary metrics
-- `convergence_results.json` - Convergence tracking data
-- `final_optimization_results.json` - Final analysis results
+### Understanding Checkpoint Files
 
-### Results Viewer (`view_results.py`):
-- `pareto_summary.png` - Simplified Pareto plot
-- Automatically finds and uses latest results
+Each `checkpoint_iter_XXX.json` contains:
+
+```json
+{
+  "iteration": 5,
+  "timestamp": "2025-06-19T12:45:30.123456",
+  "train_x": [[...], [...], ...],       // All X points evaluated so far
+  "train_y": [[perf, cost], ...],       // All Y values evaluated so far  
+  "n_evaluations": 25,
+  "new_x": [[...], [...], ...],         // New X candidates from this iteration
+  "new_y": [[perf, cost], ...],         // New Y values from this iteration
+  "new_candidates_count": 3,
+  "pareto_info": {
+    "n_pareto_solutions": 8,
+    "best_performance": 2.540,
+    "best_cost": 0.058,
+    "pareto_mask": [true, false, ...]    // Which points are Pareto-optimal
+  }
+}
+```
+
+**Key Checkpoint Data:**
+- `train_x`/`train_y`: Complete dataset at this iteration
+- `new_x`/`new_y`: What BoTorch suggested and how it performed
+- `pareto_info`: Current Pareto front statistics
+- `timestamp`: Exact time of this iteration
+
+### Other Optimization Outputs:
+```
+outputs/jun_19_11_53/
+├── pareto_optimization.png             # Pareto front plot
+├── optimization_results.json           # Analysis & recommendations  
+├── pareto_front.png                    # Alternative visualization
+└── optimization_summary.png            # Summary statistics
+```
+
+## 🔍 Monitoring & Analysis
+
+### Real-time Progress Monitoring
+```bash
+# Monitor the latest optimization run
+python monitor_progress.py
+
+# Output example:
+📊 Iteration 5 - 12:45:30
+   Total evaluations: 25
+   Pareto solutions: 8
+   Best performance: 2.540
+   Best cost: 0.058
+   New candidates: 3
+```
+
+### Post-Run Analysis
+```bash
+# View detailed results from any run
+python view_results.py outputs/jun_19_12_45_botorch/
+```
 
 ## 🏆 Key Features
 
@@ -103,12 +221,13 @@ The system successfully identifies optimal trade-offs:
 
 This implementation demonstrates several advanced concepts:
 
-1. **Bayesian-Inspired Multi-Objective Optimization**
-2. **Continuous Relaxation of Discrete Optimization Problems**
-3. **Pareto Efficiency Analysis for Multi-Criteria Decision Making**
-4. **Realistic Cost Modeling for LLM Systems**
-5. **Scalable Multi-Agent Architecture**
-6. **Timestamped Output Organization**
+1. **Bayesian Optimization with BoTorch** - True Bayesian optimization using Gaussian processes
+2. **Multi-Objective Optimization** - Simultaneous optimization of performance and cost
+3. **Continuous-to-Discrete Mapping** - Continuous relaxation of discrete optimization problems
+4. **Pareto Efficiency Analysis** - Multi-criteria decision making for optimal trade-offs
+5. **Realistic Cost Modeling** - LLM token pricing and usage patterns
+6. **Scalable Multi-Agent Architecture** - Task-specialized agent configurations
+7. **Timestamped Output Organization** - Systematic experiment tracking
 
 ## 🎯 Project Benefits
 
@@ -118,7 +237,42 @@ This implementation demonstrates several advanced concepts:
 - **📊 Comprehensive**: Multiple analysis and visualization tools
 - **🧹 Clean**: No global paths, everything is relative and organized
 
-## 📞 Usage Notes
+## � Usage
+
+### **BoTorch Bayesian Optimization (Recommended):**
+```bash
+# Configure optimization parameters
+nano config.yaml
+
+# Run BoTorch optimization with checkpoints
+python run_botorch_optimization.py
+
+# View results and create visualizations
+python view_results.py
+
+# Create 3D Pareto evolution plots from checkpoints
+python visualize_pareto_evolution.py
+```
+
+### **Alternative Methods:**
+```bash
+# Run basic heuristic optimization
+python run_full_optimization.py
+
+# Run iterative optimization with live tracking
+python run_iterative_optimization.py
+```
+
+### **Analysis Tools:**
+```bash
+# Inspect checkpoint files
+python inspect_checkpoints.py outputs/latest_folder
+
+# Monitor optimization progress (during runs)
+python monitor_progress.py
+```
+
+## �📞 Usage Notes
 
 - All file paths are relative to the framework directory
 - Run scripts from within the framework directory
