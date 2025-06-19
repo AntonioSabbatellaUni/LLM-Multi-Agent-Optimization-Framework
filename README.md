@@ -25,13 +25,12 @@ LLM Multi-Agent Optimization Framework/
 │   ├── botorch_optimization.py        # Bayesian optimization with BoTorch
 │   ├── iterative_optimization.py      # Convergence tracking optimizer
 │   ├── run_full_optimization.py       # Heuristic optimization runner
-│   ├── run_botorch_optimization.py    # BoTorch optimization runner (legacy)
-│   ├── run_botorch_optimization_v2.py # BoTorch with YAML config & checkpoints
+│   ├── run_botorch_optimization.py    # BoTorch optimization runner with YAML config & checkpoints
 │   ├── run_iterative_optimization.py  # Convergence analysis runner
 │   ├── monitor_progress.py            # Real-time optimization monitoring tool
-│   └── view_results.py               # Results visualization tool
+│   └── view_results.py                # Results visualization tool
 ├── 📋 config.yaml                     # Configuration file for BoTorch optimization
-├── 📋 requirements.txt                 # Python package dependencies
+├── 📋 requirements.txt                # Python package dependencies
 ├── 📋 .gitignore                      # Git ignore rules
 └── 📋 README.md                       # This documentation
 ```
@@ -58,7 +57,7 @@ Uses true Bayesian optimization with Gaussian Process models and qLogEHVI acquis
 
 ```bash
 # Configure optimization in config.yaml first, then run:
-python run_botorch_optimization_v2.py
+python run_botorch_optimization.py
 ```
 
 **Features:**
