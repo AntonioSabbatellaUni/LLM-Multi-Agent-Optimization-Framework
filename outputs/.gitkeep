@@ -1,0 +1,5 @@
+# This file ensures the outputs directory is tracked by Git
+# while ignoring all generated output files
+# 
+# The optimization results will be generated in timestamped subdirectories
+# like outputs/jun_19_12_07/ etc.
