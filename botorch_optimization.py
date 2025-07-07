@@ -46,6 +46,15 @@ class BoTorchOptimizer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = torch.double
         
+        # Print GPU info
+        if self.device.type == "cuda":
+            gpu_name = torch.cuda.get_device_name(0)
+            gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3  # GB
+            print(f"🚀 GPU acceleration enabled: {gpu_name}")
+            print(f"   GPU Memory: {gpu_memory:.1f} GB")
+        else:
+            print("⚠️  Running on CPU - GPU not available")
+        
         # Set default bounds [0, 1] for normalized feature space
         if bounds is None:
             bounds = torch.tensor([[0.0] * self.dimension, [1.0] * self.dimension], dtype=self.dtype)
@@ -58,6 +67,7 @@ class BoTorchOptimizer:
         
         print(f"BoTorch Optimizer initialized:")
         print(f"  - Device: {self.device}")
+        print(f"  - Dtype: {self.dtype}")
         print(f"  - Search dimension: {self.dimension}")
         print(f"  - Bounds: {self.bounds.shape}")
         print(f"  - Reference point: {self.ref_point}")
@@ -90,14 +100,18 @@ class BoTorchOptimizer:
                 outcome_transform=Standardize(m=1)
             )
             
+            # Move model to GPU
+            model = model.to(device=self.device, dtype=self.dtype)
+            
             # Fit the model
             mll = ExactMarginalLogLikelihood(model.likelihood, model)
             fit_gpytorch_mll(mll)
             
             models.append(model)
         
-        # Create ModelListGP
+        # Create ModelListGP and move to GPU
         model = ModelListGP(*models)
+        model = model.to(device=self.device, dtype=self.dtype)
         return model
     
     def _generate_initial_data(self, n_points: int) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -239,6 +253,10 @@ class BoTorchOptimizer:
             # Track all data
             all_x.append(candidates)
             all_y.append(new_y)
+            
+            # Clear GPU memory cache periodically
+            if self.device.type == "cuda" and iteration % 5 == 0:
+                torch.cuda.empty_cache()
             
             # Incremental saving
             if output_dir and (iteration % save_interval == 0):
