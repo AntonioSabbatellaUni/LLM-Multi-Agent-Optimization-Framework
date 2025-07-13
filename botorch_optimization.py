@@ -7,6 +7,7 @@ import torch
 import numpy as np
 import json
 import os
+import time
 from typing import Dict, Any, Tuple
 from botorch.models import ModelListGP, SingleTaskGP
 from botorch.models.transforms.outcome import Standardize
@@ -21,6 +22,10 @@ from datetime import datetime
 
 # Import from our existing files
 from data_processor_v2 import NumpyLLMEvaluator
+from logging_utils import (
+    setup_optimization_logger, log_optimization_start, log_system_info, 
+    log_gpu_info, log_iteration_timing, log_optimization_complete
+)
 
 class BoTorchOptimizer:
     """
@@ -42,18 +47,15 @@ class BoTorchOptimizer:
         self.dimension = evaluator.n_agents * len(evaluator.feature_names)
         self.output_dir = output_dir
         
+        # Setup logging
+        self.logger = setup_optimization_logger('BoTorchOptimizer', output_dir)
+        
         # Device and dtype setup
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = torch.double
         
-        # Print GPU info
-        if self.device.type == "cuda":
-            gpu_name = torch.cuda.get_device_name(0)
-            gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3  # GB
-            print(f"🚀 GPU acceleration enabled: {gpu_name}")
-            print(f"   GPU Memory: {gpu_memory:.1f} GB")
-        else:
-            print("⚠️  Running on CPU - GPU not available")
+        # Log GPU info
+        log_gpu_info(self.logger, self.device)
         
         # Set default bounds [0, 1] for normalized feature space
         if bounds is None:
@@ -65,15 +67,10 @@ class BoTorchOptimizer:
             ref_point = torch.tensor([0.0, -50.0], dtype=self.dtype)  # [min_performance, min_negative_cost]
         self.ref_point = ref_point.to(device=self.device, dtype=self.dtype)
         
-        print(f"BoTorch Optimizer initialized:")
-        print(f"  - Device: {self.device}")
-        print(f"  - Dtype: {self.dtype}")
-        print(f"  - Search dimension: {self.dimension}")
-        print(f"  - Bounds: {self.bounds.shape}")
-        print(f"  - Reference point: {self.ref_point}")
+        # Log system configuration
+        log_system_info(self.logger, self.device, self.dimension, self.bounds.shape, self.ref_point)
         if self.output_dir:
-            print(f"  - Checkpoints will be saved to: {self.output_dir}")
-    
+            self.logger.info(f"  - Checkpoints will be saved to: {self.output_dir}")
     def _initialize_model(self, train_x: torch.Tensor, train_y: torch.Tensor) -> ModelListGP:
         """
         Initialize and fit a ModelListGP with standardized outcomes.
@@ -157,7 +154,7 @@ class BoTorchOptimizer:
         X_init_torch = torch.tensor(X_init, dtype=self.dtype, device=self.device)
         Y_init_torch = torch.tensor(Y_init, dtype=self.dtype, device=self.device)
         
-        print(f"Initial data generated: X shape {X_init_torch.shape}, Y shape {Y_init_torch.shape}")
+        self.logger.info(f"Initial data generated: X shape {X_init_torch.shape}, Y shape {Y_init_torch.shape}")
         return X_init_torch, Y_init_torch
     
     def optimize(self, n_initial: int = 20, n_iterations: int = 50, q: int = 5, save_interval: int = 5, output_dir: str = None) -> Dict[str, Any]:
@@ -174,11 +171,11 @@ class BoTorchOptimizer:
         Returns:
             Dictionary with optimization results
         """
-        print("="*80)
-        print("🚀 BOTORCH BAYESIAN OPTIMIZATION")
-        print("="*80)
-        print(f"Running {n_iterations} iterations with batch size {q}")
-        print("="*80)
+        self.logger.info("="*80)
+        self.logger.info("🚀 BOTORCH BAYESIAN OPTIMIZATION")
+        self.logger.info("="*80)
+        self.logger.info(f"Running {n_iterations} iterations with batch size {q}")
+        self.logger.info("="*80)
         
         # Step 1: Generate initial data
         train_x, train_y = self._generate_initial_data(n_initial)
@@ -187,20 +184,26 @@ class BoTorchOptimizer:
         all_x = [train_x]
         all_y = [train_y]
         
+        # Track iteration times for ETA calculation
+        iteration_times = []
+        
         # Save initial state
         if output_dir:
             self._save_checkpoint(train_x, train_y, 0, output_dir)
         
         # Step 2: Bayesian Optimization loop
         for iteration in range(1, n_iterations + 1):
-            print(f"\n🔄 Iteration {iteration}/{n_iterations}")
+            iter_start_time = time.time()
+            self.logger.info(f"\n🔄 Iteration {iteration}/{n_iterations}")
             
             # Fit GP model
-            print("  📊 Fitting GP model...")
+            gp_start_time = time.time()
+            self.logger.info("  📊 Fitting GP model...")
             model = self._initialize_model(train_x, train_y)
+            gp_time = time.time() - gp_start_time
             
             # Get current Pareto front for partitioning
-            print("  🎯 Computing Pareto front...")
+            self.logger.info("  🎯 Computing Pareto front...")
             pareto_mask = is_non_dominated(train_y)
             pareto_y = train_y[pareto_mask]
             
@@ -212,7 +215,8 @@ class BoTorchOptimizer:
                 )
                 
                 # Create acquisition function
-                print("  🎲 Optimizing acquisition function...")
+                acq_start_time = time.time()
+                self.logger.info("  🎲 Optimizing acquisition function...")
                 sampler = SobolQMCNormalSampler(sample_shape=torch.Size([512]))
                 
                 acq_func = qLogExpectedHypervolumeImprovement(
@@ -230,21 +234,25 @@ class BoTorchOptimizer:
                     num_restarts=20,
                     raw_samples=1024,
                 )
+                acq_time = time.time() - acq_start_time
                 
-                print(f"  ✅ Found {q} new candidates")
+                self.logger.info(f"  ✅ Found {q} new candidates")
                 
             except Exception as e:
-                print(f"  ⚠️  Acquisition optimization failed: {e}")
-                print("  🎲 Falling back to random sampling...")
+                self.logger.warning(f"  ⚠️  Acquisition optimization failed: {e}")
+                self.logger.info("  🎲 Falling back to random sampling...")
                 # Fallback: random sampling
+                acq_time = 0.0  # No acquisition time for fallback
                 candidates = torch.rand(q, self.dimension, dtype=self.dtype, device=self.device)
                 candidates = self.bounds[0] + (self.bounds[1] - self.bounds[0]) * candidates
             
             # Evaluate new candidates
-            print("  📈 Evaluating new candidates...")
+            eval_start_time = time.time()
+            self.logger.info("  📈 Evaluating new candidates...")
             candidates_np = candidates.detach().cpu().numpy()
             new_y_np = self.evaluator.evaluate_agent_system(candidates_np)
             new_y = torch.tensor(new_y_np, dtype=self.dtype, device=self.device)
+            eval_time = time.time() - eval_start_time
             
             # Update training data
             train_x = torch.cat([train_x, candidates], dim=0)
@@ -262,7 +270,7 @@ class BoTorchOptimizer:
             if output_dir and (iteration % save_interval == 0):
                 self._save_checkpoint(train_x, train_y, iteration, output_dir, 
                                     new_x=candidates, new_y=new_y)
-                print(f"💾 Checkpoint saved at iteration {iteration}")
+                self.logger.info(f"💾 Checkpoint saved at iteration {iteration}")
             
             # Progress update
             current_pareto_mask = is_non_dominated(train_y)
@@ -270,11 +278,25 @@ class BoTorchOptimizer:
             best_performance = train_y[:, 0].max().item()
             best_cost = (-train_y[:, 1]).min().item()
             
-            print(f"  📊 Current: {len(train_y)} evaluations, {n_pareto} Pareto solutions")
-            print(f"  🏆 Best performance: {best_performance:.3f}, Best cost: {best_cost:.3f}")
+            # Calculate iteration timing and ETA
+            iter_total_time = time.time() - iter_start_time
+            iteration_times.append(iter_total_time)
+            
+            # Calculate ETA
+            if len(iteration_times) > 0:
+                avg_time = sum(iteration_times) / len(iteration_times)
+                remaining_iterations = n_iterations - iteration
+                eta_seconds = avg_time * remaining_iterations
+                eta_str = f"{eta_seconds:.1f}s" if eta_seconds < 60 else f"{eta_seconds/60:.1f}m"
+            else:
+                eta_str = "calculating..."
+            
+            self.logger.info(f"  ⏱️  Timing: GP={gp_time:.1f}s | Acq={acq_time:.1f}s | Eval={eval_time:.1f}s | Total={iter_total_time:.1f}s | ETA={eta_str} remaining")
+            self.logger.info(f"  📊 Current: {len(train_y)} evaluations, {n_pareto} Pareto solutions")
+            self.logger.info(f"  🏆 Best performance: {best_performance:.3f}, Best cost: {best_cost:.3f}")
         
         # Collect final results
-        print(f"\n✅ Optimization complete!")
+        self.logger.info(f"\n✅ Optimization complete!")
         
         # Convert back to numpy for compatibility with existing analysis functions
         X_all = torch.cat(all_x, dim=0).detach().cpu().numpy()
@@ -290,10 +312,10 @@ class BoTorchOptimizer:
         X_pareto = X_pareto[pareto_order]
         Y_pareto = Y_pareto[pareto_order]
         
-        print(f"  📊 Final: {len(Y_all)} total evaluations")
-        print(f"  🎯 Final Pareto front: {len(Y_pareto)} solutions")
-        print(f"  🏆 Best performance: {Y_pareto[0, 0]:.3f}")
-        print(f"  💰 Best cost: {(-Y_pareto[:, 1]).min():.3f}")
+        self.logger.info(f"  📊 Final: {len(Y_all)} total evaluations")
+        self.logger.info(f"  🎯 Final Pareto front: {len(Y_pareto)} solutions")
+        self.logger.info(f"  🏆 Best performance: {Y_pareto[0, 0]:.3f}")
+        self.logger.info(f"  💰 Best cost: {(-Y_pareto[:, 1]).min():.3f}")
         
         results = {
             'X_all': X_all,
@@ -356,4 +378,4 @@ class BoTorchOptimizer:
         with open(checkpoint_path, 'w') as f:
             json.dump(checkpoint, f, indent=2)
         
-        print(f"  💾 Checkpoint saved: {checkpoint_path}")
+        self.logger.info(f"  💾 Checkpoint saved: {checkpoint_path}")
