@@ -1,0 +1,51 @@
+{
+  "name": "CUDA Development Container",
+  "image": "nvidia/cuda:12.8.0-devel-ubuntu22.04",
+  
+  "runArgs": [
+    "--gpus=all",
+    "--shm-size=1g"
+  ],
+  
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/usr/local/cuda/bin",
+    "LD_LIBRARY_PATH": "${containerEnv:LD_LIBRARY_PATH}:/usr/local/cuda/lib64",
+    "NVIDIA_VISIBLE_DEVICES": "all",
+    "NVIDIA_DRIVER_CAPABILITIES": "compute,utility"
+  },
+  
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "ms-toolsai.vscode-jupyter-keymap",
+        "ms-toolsai.vscode-jupyter-slideshow",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": true,
+        "python.formatting.autopep8Path": "/usr/local/py-utils/bin/autopep8",
+        "python.formatting.blackPath": "/usr/local/py-utils/bin/black",
+        "python.formatting.yapfPath": "/usr/local/py-utils/bin/yapf",
+        "python.linting.banditPath": "/usr/local/py-utils/bin/bandit",
+        "python.linting.flake8Path": "/usr/local/py-utils/bin/flake8",
+        "python.linting.mypyPath": "/usr/local/py-utils/bin/mypy",
+        "python.linting.pycodestylePath": "/usr/local/py-utils/bin/pycodestyle",
+        "python.linting.pydocstylePath": "/usr/local/py-utils/bin/pydocstyle",
+        "python.linting.pylintPath": "/usr/local/py-utils/bin/pylint"
+      }
+    }
+  },
+  
+  "postCreateCommand": "apt-get update && apt-get install -y python3-pip git curl wget && pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 && pip3 install jupyter notebook ipython && nvidia-smi",
+  
+  "forwardPorts": [8888, 6006],
+  
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ]
+}
