@@ -157,7 +157,7 @@ class BoTorchOptimizer:
         self.logger.info(f"Initial data generated: X shape {X_init_torch.shape}, Y shape {Y_init_torch.shape}")
         return X_init_torch, Y_init_torch
     
-    def optimize(self, n_initial: int = 20, n_iterations: int = 50, q: int = 5, save_interval: int = 5, output_dir: str = None) -> Dict[str, Any]:
+    def optimize(self, n_initial: int = 20, n_iterations: int = 50, q: int = 5, save_interval: int = 5, output_dir: str = None, resume_from: str = None, resume_iteration: int = None) -> Dict[str, Any]:
         """
         Run Bayesian optimization loop.
         
@@ -167,32 +167,42 @@ class BoTorchOptimizer:
             q: Batch size for acquisition optimization
             save_interval: Interval for saving checkpoints
             output_dir: Directory for saving output files
+            resume_from: Directory to resume from checkpoint (optional)
+            resume_iteration: Iteration number to resume from (optional)
             
         Returns:
             Dictionary with optimization results
         """
+        # Import CheckpointManager here to avoid circular import
+        from utils.checkpoint_manager import CheckpointManager
+
         self.logger.info("="*80)
         self.logger.info("🚀 BOTORCH BAYESIAN OPTIMIZATION")
         self.logger.info("="*80)
         self.logger.info(f"Running {n_iterations} iterations with batch size {q}")
         self.logger.info("="*80)
-        
-        # Step 1: Generate initial data
-        train_x, train_y = self._generate_initial_data(n_initial)
-        
-        # Track all evaluations
-        all_x = [train_x]
-        all_y = [train_y]
-        
-        # Track iteration times for ETA calculation
-        iteration_times = []
-        
-        # Save initial state
-        if output_dir:
-            self._save_checkpoint(train_x, train_y, 0, output_dir)
-        
+        # --- Checkpoint resume logic ---
+        if resume_from:
+            train_x, train_y, start_iteration = CheckpointManager.prepare_resume_data(resume_from, resume_iteration)
+            self.logger.info(f"🔁 Resuming from checkpoint: {resume_from}, iteration {start_iteration}")
+            all_x = [train_x]
+            all_y = [train_y]
+            iteration_times = []
+            # If resuming, only run the remaining iterations
+            iter_range = range(start_iteration + 1, n_iterations + 1)
+        else:
+            # Step 1: Generate initial data
+            train_x, train_y = self._generate_initial_data(n_initial)
+            all_x = [train_x]
+            all_y = [train_y]
+            iteration_times = []
+            # Save initial state
+            if output_dir:
+                self._save_checkpoint(train_x, train_y, 0, output_dir)
+            iter_range = range(1, n_iterations + 1)
+
         # Step 2: Bayesian Optimization loop
-        for iteration in range(1, n_iterations + 1):
+        for iteration in iter_range:
             iter_start_time = time.time()
             self.logger.info(f"\n🔄 Iteration {iteration}/{n_iterations}")
             

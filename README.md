@@ -280,6 +280,20 @@ python monitor_progress.py
 
 ---
 
-**Framework Version**: 2.0  
-**Date**: June 19, 2025  
-**Status**: Production Ready ✅
+## 🧪 Testing
+
+To verify checkpoint and optimization functionality:
+
+```bash
+# Run all tests
+pytest tests/test_checkpoint_system.py -v
+
+# Run only unit tests (faster)
+pytest tests/test_checkpoint_system.py::TestCheckpointManager -v
+```
+
+Tests cover:
+- Checkpoint management (finding, loading, validating)
+- Resume functionality (restart optimization from checkpoint)
+- Error handling (missing files, directories, or keys)
+- Integration (end-to-end BoTorchOptimizer resume)
