@@ -121,6 +121,7 @@ Each run creates a timestamped folder in `outputs/` with:
 ```
 outputs/jun_19_12_45_botorch/
 ├── config_used.yaml                    # Configuration used for this run
+├── resume_info.json                    # Resume source info (if resumed)
 ├── checkpoint_iter_000.json            # Initial state (iteration 0)  
 ├── checkpoint_iter_001.json            # After iteration 1
 ├── checkpoint_iter_002.json            # After iteration 2
@@ -245,6 +246,12 @@ nano config.yaml
 
 # Run BoTorch optimization with checkpoints
 python run_botorch_optimization.py
+
+# Resume from checkpoint (latest iteration)
+python run_botorch_optimization.py --resume-from outputs/jul_13_09_52_botorch
+
+# Resume from specific iteration  
+python run_botorch_optimization.py --resume-from outputs/jul_13_09_52_botorch --resume-iteration 2
 
 # View results and create visualizations
 python view_results.py
