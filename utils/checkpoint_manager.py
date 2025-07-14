@@ -2,6 +2,8 @@ import os
 import json
 import torch
 from typing import Optional, Tuple
+import shutil
+from datetime import datetime
 
 class CheckpointManager:
     @staticmethod
@@ -89,3 +91,54 @@ class CheckpointManager:
             "latest_evaluations": latest_data.get('n_evaluations', 'unknown'),
             "latest_timestamp": latest_data.get('timestamp', 'unknown')
         }
+    
+    @staticmethod
+    def create_resume_info(new_output_dir: str, resume_from: str, resume_iteration: Optional[int] = None) -> str:
+        """Create a resume info file in the new output directory and copy relevant checkpoints."""        
+        # Get source checkpoint info
+        if resume_iteration is None:
+            checkpoint_path = CheckpointManager.find_latest_checkpoint(resume_from)
+            if checkpoint_path is None:
+                raise FileNotFoundError(f"No checkpoints found in {resume_from}")
+        else:
+            checkpoint_path = os.path.join(resume_from, f'checkpoint_iter_{resume_iteration:03d}.json')
+        
+        source_data = CheckpointManager.load_checkpoint_data(checkpoint_path)
+        source_iteration = source_data['iteration']
+        
+        # Copy all checkpoint files up to and including the resume iteration
+        available_iterations = CheckpointManager.get_available_iterations(resume_from)
+        iterations_to_copy = [it for it in available_iterations if it <= source_iteration]
+        
+        copied_files = []
+        for iteration in iterations_to_copy:
+            source_file = os.path.join(resume_from, f'checkpoint_iter_{iteration:03d}.json')
+            dest_file = os.path.join(new_output_dir, f'checkpoint_iter_{iteration:03d}.json')
+            if os.path.exists(source_file):
+                shutil.copy2(source_file, dest_file)
+                copied_files.append(f'checkpoint_iter_{iteration:03d}.json')
+        
+        # Create resume info
+        resume_info = {
+            "resumed_from": {
+                "source_directory": resume_from,
+                "source_iteration": source_iteration,
+                "resume_timestamp": datetime.now().isoformat(),
+                "source_evaluations": source_data.get('n_evaluations', 'unknown'),
+                "source_timestamp": source_data.get('timestamp', 'unknown')
+            },
+            "resume_details": {
+                "continuing_from_iteration": source_iteration + 1,
+                "data_points_loaded": len(source_data.get('train_x', [])),
+                "objectives_loaded": len(source_data.get('train_y', [])),
+                "checkpoints_copied": copied_files,
+                "total_copied": len(copied_files)
+            }
+        }
+        
+        # Save resume info file
+        resume_info_path = os.path.join(new_output_dir, 'resume_info.json')
+        with open(resume_info_path, 'w') as f:
+            json.dump(resume_info, f, indent=2)
+        
+        return resume_info_path

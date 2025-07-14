@@ -4,7 +4,7 @@
 # Optimization Parameters
 optimization:
   n_initial: 10        # Number of initial random points
-  n_iterations: 2      # Number of Bayesian Optimization iterations
+  n_iterations: 4      # Number of Bayesian Optimization iterations
   batch_size: 5        # Number of candidates per iteration (q)
   
 # Model Parameters

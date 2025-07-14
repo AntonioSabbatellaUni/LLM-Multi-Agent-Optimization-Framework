@@ -9,6 +9,7 @@ import torch
 import numpy as np
 import yaml
 import shutil
+import argparse
 from datetime import datetime
 from botorch_optimization import BoTorchOptimizer
 from data_processor_v2 import create_evaluator
@@ -52,7 +53,7 @@ def print_banner():
     print("Using Gaussian Process models with qLogExpectedHypervolumeImprovement")
     print("="*80)
 
-def demonstrate_botorch_optimization(config_path: str = "config.yaml"):
+def demonstrate_botorch_optimization(config_path: str = "config.yaml", resume_from: str = None, resume_iteration: int = None):
     """Run the complete BoTorch optimization demonstration."""
     
     print_banner()
@@ -108,12 +109,36 @@ def demonstrate_botorch_optimization(config_path: str = "config.yaml"):
     print(f"\n🎯 STEP 2: RUNNING BOTORCH MULTI-OBJECTIVE OPTIMIZATION")
     print("-" * 50)
     
+    # Show resume info if resuming
+    if resume_from:
+        from utils.checkpoint_manager import CheckpointManager
+        print(f"🔁 RESUMING from checkpoint: {resume_from}")
+        if resume_iteration is not None:
+            print(f"   Starting from iteration: {resume_iteration}")
+        else:
+            print(f"   Starting from latest iteration")
+        
+        # Create resume info file and copy checkpoints
+        resume_info_path = CheckpointManager.create_resume_info(output_dir, resume_from, resume_iteration)
+        print(f"📝 Resume info saved to: {resume_info_path}")
+        
+        # Load and show copy details
+        import json
+        with open(resume_info_path, 'r') as f:
+            resume_info = json.load(f)
+        
+        copied_count = resume_info['resume_details']['total_copied']
+        source_iter = resume_info['resumed_from']['source_iteration']
+        print(f"📁 Copied {copied_count} checkpoint files (iterations 0-{source_iter}) to new folder")
+    
     torch_results = optimizer.optimize(
         n_initial=config['optimization']['n_initial'],
         n_iterations=config['optimization']['n_iterations'],
         q=config['optimization']['batch_size'],
         save_interval=1,  # Save checkpoints every iteration
-        output_dir=output_dir  # Pass the output directory
+        output_dir=output_dir,  # Pass the output directory
+        resume_from=resume_from,  # Resume functionality
+        resume_iteration=resume_iteration  # Specific iteration to resume from
     )
     
     # Step 4: Analyze results (convert format for compatibility)
@@ -215,7 +240,14 @@ def demonstrate_botorch_optimization(config_path: str = "config.yaml"):
 
 def main():
     """Main entry point."""
-    config_path = "config.yaml"
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Run BoTorch optimization with optional checkpoint resume')
+    parser.add_argument('--config', default='config.yaml', help='Path to config file (default: config.yaml)')
+    parser.add_argument('--resume-from', type=str, help='Directory to resume from checkpoint')
+    parser.add_argument('--resume-iteration', type=int, help='Specific iteration to resume from (optional)')
+    
+    args = parser.parse_args()
+    config_path = args.config
     
     # Check if config file exists
     if not os.path.exists(config_path):
@@ -224,7 +256,7 @@ def main():
         return 1
     
     try:
-        analysis = demonstrate_botorch_optimization(config_path)
+        analysis = demonstrate_botorch_optimization(config_path, args.resume_from, args.resume_iteration)
         return 0
     except Exception as e:
         print(f"\n❌ ERROR: {str(e)}")
