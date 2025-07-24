@@ -173,24 +173,54 @@ class BoTorchOptimizer:
         Returns:
             Dictionary with optimization results
         """
-        # Import CheckpointManager here to avoid circular import
-        from utils.checkpoint_manager import CheckpointManager
+        # --- Dynamic sys.path management for GAIA repository integration ---
+        import sys
+        from pathlib import Path
+        
+        # Setup path to GAIA smolagents repository
+        current_file_dir = Path(__file__).parent
+        gaia_repo_path = current_file_dir / "multi_agent_architectures" / "gaia_smolagents" / "smolagents_repo" / "examples" / "open_deep_research"
+        
+        # Add GAIA repository to Python path if it exists
+        if gaia_repo_path.exists() and str(gaia_repo_path) not in sys.path:
+            sys.path.insert(0, str(gaia_repo_path))
+            self.logger.debug(f"Added to Python path: {gaia_repo_path}")
+        
+        # Attempt to import CheckpointManager with graceful fallback
+        try:
+            from utils.checkpoint_manager import CheckpointManager
+            CHECKPOINT_AVAILABLE = True
+            self.logger.debug("CheckpointManager loaded successfully")
+        except ImportError as e:
+            self.logger.warning(f"CheckpointManager unavailable: {e}")
+            self.logger.info("Using simplified checkpoint functionality")
+            CheckpointManager = None
+            CHECKPOINT_AVAILABLE = False
 
         self.logger.info("="*80)
         self.logger.info("🚀 BOTORCH BAYESIAN OPTIMIZATION")
         self.logger.info("="*80)
         self.logger.info(f"Running {n_iterations} iterations with batch size {q}")
         self.logger.info("="*80)
-        # --- Checkpoint resume logic ---
-        if resume_from:
-            train_x, train_y, start_iteration = CheckpointManager.prepare_resume_data(resume_from, resume_iteration)
-            self.logger.info(f"🔁 Resuming from checkpoint: {resume_from}, iteration {start_iteration}")
-            all_x = [train_x]
-            all_y = [train_y]
-            iteration_times = []
-            # If resuming, only run the remaining iterations
-            iter_range = range(start_iteration + 1, n_iterations + 1)
-        else:
+        
+        # --- Checkpoint resume logic con fallback ---
+        if resume_from and CHECKPOINT_AVAILABLE:
+            try:
+                train_x, train_y, start_iteration = CheckpointManager.prepare_resume_data(resume_from, resume_iteration)
+                self.logger.info(f"🔁 Resuming from checkpoint: {resume_from}, iteration {start_iteration}")
+                all_x = [train_x]
+                all_y = [train_y]
+                iteration_times = []
+                # If resuming, only run the remaining iterations
+                iter_range = range(start_iteration + 1, n_iterations + 1)
+            except Exception as e:
+                self.logger.warning(f"⚠️  Resume fallito: {e}. Ripartendo da zero.")
+                resume_from = None  # Force fresh start
+        
+        if not resume_from or not CHECKPOINT_AVAILABLE:
+            if resume_from and not CHECKPOINT_AVAILABLE:
+                self.logger.warning("⚠️  Resume richiesto ma CheckpointManager non disponibile. Ripartendo da zero.")
+            
             # Step 1: Generate initial data
             train_x, train_y = self._generate_initial_data(n_initial)
             all_x = [train_x]

@@ -7,6 +7,9 @@
 outputs/*/
 !outputs/.gitkeep
 
+/teamspace/studios/this_studio/LLM Multi-Agent Optimization Framework/data/gaia/*
+.mp3
+
 # Specific output file patterns
 *.png
 *.json
@@ -261,3 +264,5 @@ mlruns/
 # ==============================================================================
 docs/_build/
 .readthedocs.yml
+data/gaia/2023/test/0c393561-dd13-4b7c-ac49-20ac469aa276.MOV
+data/gaia/2023/*

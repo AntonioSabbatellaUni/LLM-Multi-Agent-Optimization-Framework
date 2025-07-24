@@ -12,6 +12,16 @@ This framework implements sophisticated multi-objective optimization approaches 
 
 ```
 LLM Multi-Agent Optimization Framework/
+├── 📁 multi_agent_architectures/        # 🆕 Multi-agent architecture implementations
+│   ├── README.md                       # Architecture system documentation
+│   ├── simulated/                      # Fast simulated evaluation
+│   │   ├── config.yaml                 # Simulated architecture config
+│   │   └── evaluator.py                # Simulated evaluation implementation
+│   └── gaia_smolagents/                # Real GAIA benchmark evaluation
+│       ├── README.md                   # GAIA architecture documentation
+│       ├── config.yaml                 # GAIA architecture config
+│       ├── evaluator.py                # GAIA benchmark implementation
+│       └── smolagents_repo/            # (Cloned executor repository)
 ├── 📁 data/
 │   └── llm_data.csv                    # 24 LLMs with performance & cost data
 ├── 📁 outputs/                         # All generated results (timestamped folders)
@@ -24,6 +34,7 @@ LLM Multi-Agent Optimization Framework/
 │   ├── basic_optimization.py          # Heuristic multi-objective optimization
 │   ├── botorch_optimization.py        # Bayesian optimization with BoTorch
 │   ├── iterative_optimization.py      # Convergence tracking optimizer
+│   ├── run_multi_agent_optimization.py # 🆕 Main runner with multi-architecture support
 │   ├── run_full_optimization.py       # Heuristic optimization runner
 │   ├── run_botorch_optimization.py    # BoTorch optimization runner with YAML config & checkpoints
 │   ├── run_iterative_optimization.py  # Convergence analysis runner
@@ -52,7 +63,26 @@ pip install -r requirements.txt
 
 ### Running Different Optimization Methods
 
-#### 1. 🔥 **BoTorch Bayesian Optimization (Recommended)**
+#### 🆕 **Multi-Agent Optimization (Recommended - New Framework)**
+The new unified runner supports multiple evaluation architectures with seamless switching.
+
+```bash
+# Configure in config.yaml, then run:
+python run_multi_agent_optimization.py
+```
+
+**Available Architectures:**
+- ✅ **Simulated**: Fast evaluation using CSV data (default)
+- ✅ **GAIA SmolagentsLibrary**: Real benchmark evaluation on actual tasks
+
+**Configuration Selection:**
+```yaml
+# In config.yaml
+evaluation:
+  architecture: "simulated"  # or "gaia_smolagents"
+```
+
+#### 1. 🔥 **BoTorch Bayesian Optimization (Legacy)**
 Uses true Bayesian optimization with Gaussian Process models and qLogEHVI acquisition function.
 
 ```bash
@@ -191,7 +221,41 @@ python monitor_progress.py
 python view_results.py outputs/jun_19_12_45_botorch/
 ```
 
-## 🏆 Key Features
+## �️ Multi-Agent Architectures
+
+The framework now supports multiple evaluation architectures, making it extensible for different multi-agent systems and benchmarks.
+
+### 🏃‍♂️ **Simulated Architecture (Default)**
+- **Purpose**: Fast prototyping and algorithm development
+- **Evaluation**: CSV-based distance projection to real LLMs
+- **Speed**: Very fast (~seconds per configuration)
+- **Use Case**: Algorithm testing, hyperparameter tuning, initial exploration
+
+### 🎯 **GAIA SmolagentsLibrary Architecture**
+- **Purpose**: Real-world evaluation with actual task execution
+- **Evaluation**: Live benchmark execution on GAIA dataset tasks
+- **Speed**: Slower (~minutes per configuration)
+- **Use Case**: Production optimization, final model selection, research validation
+
+### 🔧 **Architecture Configuration**
+
+```yaml
+# Main config.yaml
+evaluation:
+  architecture: "simulated"  # Options: "simulated", "gaia_smolagents"
+
+# Architecture-specific configs are in:
+# multi_agent_architectures/<architecture_name>/config.yaml
+```
+
+### 🚀 **Adding New Architectures**
+
+1. Create directory: `multi_agent_architectures/your_architecture/`
+2. Implement `evaluator.py` with `evaluate_agent_system` method
+3. Add `config.yaml` with architecture parameters
+4. Update main config to include your architecture option
+
+## �🏆 Key Features
 
 ### 🎯 Multi-Objective Optimization
 - **Objective 1**: Maximize system performance (sum of agent-specific performance scores)
@@ -237,9 +301,24 @@ This implementation demonstrates several advanced concepts:
 - **📊 Comprehensive**: Multiple analysis and visualization tools
 - **🧹 Clean**: No global paths, everything is relative and organized
 
-## � Usage
+## 🚀 Usage
 
-### **BoTorch Bayesian Optimization (Recommended):**
+### **Multi-Agent Optimization Framework (Recommended):**
+```bash
+# Configure optimization parameters and architecture
+nano config.yaml
+
+# Run with selected architecture (simulated or gaia_smolagents)
+python run_multi_agent_optimization.py
+
+# Resume from checkpoint (works with any architecture)
+python run_botorch_optimization.py --resume-from outputs/jul_13_09_52_botorch
+
+# Resume from specific iteration  
+python run_botorch_optimization.py --resume-from outputs/jul_13_09_52_botorch --resume-iteration 2
+```
+
+### **Legacy BoTorch Bayesian Optimization:**
 ```bash
 # Configure optimization parameters
 nano config.yaml

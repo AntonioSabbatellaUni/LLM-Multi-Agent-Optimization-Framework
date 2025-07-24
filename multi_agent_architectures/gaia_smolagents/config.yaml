@@ -1,0 +1,69 @@
+# GAIA SmolagentsLibrary Architecture Configuration
+
+# Architecture identification
+architecture:
+  name: "gaia_smolagents"
+  description: "Real benchmark evaluation using GAIA dataset with SmolagentsLibrary"
+  n_agents: 5  # Fixed architecture requirement
+  
+  # Agent role definitions (order matters for mapping)
+  agent_roles:
+    - "manager"
+    - "search_agent" 
+    - "text_inspector"
+    - "visual_qa"
+    - "reformulator"
+  
+# Evaluation parameters
+evaluation:
+  # Dataset sampling limits (smaller = faster evaluation)
+  dataset_limits:
+    task_1: 1    # Number of level 1 GAIA tasks to evaluate - MINIMAL FOR TESTING
+    task_2: 1    # Number of level 2 GAIA tasks to evaluate - MINIMAL FOR TESTING
+    task_3: 0    # Number of level 3 GAIA tasks to evaluate - DISABLED FOR TESTING
+  
+  # Execution parameters
+  timeout_per_task: 3000      # Maximum seconds per task
+  save_detailed_results: true  # Whether to save execution traces
+  run_name_prefix: "botorch_eval_22"  # Prefix for evaluation run names
+  
+  # Error handling
+  fallback_accuracy: 0.0     # Accuracy assigned on execution error
+  fallback_cost: 100.0       # High cost penalty for failed executions
+
+# Model configuration template
+model_config:
+  default_model_class: "LiteLLMModel"  # Default model class for all agents
+  
+  # Per-role model class overrides (if needed)
+  role_specific_classes:
+    manager: "LiteLLMModel"
+    search_agent: "LiteLLMModel"
+    text_inspector: "LiteLLMModel"
+    visual_qa: "LiteLLMModel"
+    reformulator: "LiteLLMModel"
+
+# Repository configuration (will be set after cloning)
+repository:
+  path: "./smolagents_repo"  # Relative path to cloned executor repository
+  
+  # Import paths within the repository
+  optimization_interface_path: "examples/open_deep_research/optimization_interface.py"
+  required_modules:
+    - "optimization_interface"
+
+# BoTorch integration settings
+botorch_integration:
+  # How to handle LLM mapping from continuous space to discrete models
+  llm_mapping:
+    method: "euclidean_distance"  # Distance-based projection to nearest LLM
+    feature_weights: "uniform"    # Equal weight to all features, or "custom"
+  
+  # Normalization for returned metrics
+  performance_normalization:
+    method: "percentage"    # accuracy is already 0-100, normalize to 0-1
+    scale_factor: 0.01     # divide by 100
+  
+  cost_normalization:
+    method: "negative"     # BoTorch maximizes, so negate cost
+    log_scale: false       # whether to apply log scaling
