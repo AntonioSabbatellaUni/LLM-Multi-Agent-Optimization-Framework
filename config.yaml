@@ -3,9 +3,9 @@
 
 # Optimization Parameters
 optimization:
-  n_initial: 2         # Number of initial random points - REDUCED FOR REAL TESTING
-  n_iterations: 1      # Number of Bayesian Optimization iterations - REDUCED
-  batch_size: 1        # Number of candidates per iteration (q) - Reduced for speed
+  n_initial: 2         # Number of initial random points - Increased for better exploration
+  n_iterations: 3     # Number of Bayesian Optimization iterations - Increased for real testing
+  batch_size: 1        # Number of candidates per iteration (q) - Keep at 1 for stability
   
 # Model Parameters
 model:

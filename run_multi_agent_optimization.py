@@ -15,6 +15,7 @@ import torch
 import numpy as np
 import yaml
 import shutil
+import argparse
 from datetime import datetime
 from botorch_optimization import BoTorchOptimizer
 from basic_optimization import analyze_results, plot_pareto_front, save_results
@@ -119,7 +120,7 @@ def copy_configs_to_output(config_path: str, arch_config_path: str, output_dir: 
     print(f"📋 Configurations copied to output directory")
 
 
-def print_banner(architecture_name: str):
+def print_banner(architecture_name: str, resume_from: str = None):
     """Print an informative banner."""
     print("="*80)
     print("🚀 MULTI-AGENT LLM OPTIMIZATION FRAMEWORK")
@@ -131,10 +132,12 @@ def print_banner(architecture_name: str):
         print("Mode: Real benchmark evaluation using GAIA dataset")
     print("Finding optimal Performance vs Cost trade-offs using Bayesian Optimization")
     print("Using Gaussian Process models with qLogExpectedHypervolumeImprovement")
+    if resume_from:
+        print(f"🔁 RESUMING from checkpoint: {resume_from}")
     print("="*80)
 
 
-def demonstrate_multi_agent_optimization(config_path: str = "config.yaml"):
+def demonstrate_multi_agent_optimization(config_path: str = "config.yaml", resume_from: str = None, resume_iteration: int = None):
     """Run multi-agent LLM optimization with architecture selection."""
     
     # Step 0: Load configurations
@@ -142,13 +145,28 @@ def demonstrate_multi_agent_optimization(config_path: str = "config.yaml"):
     architecture_name = config['evaluation']['architecture']
     arch_config = load_architecture_config(architecture_name)
     
-    print_banner(architecture_name)
+    print_banner(architecture_name, resume_from)
     
     # Step 1: Create timestamped output folder
     output_dir = create_timestamp_folder(
         config['experiment']['name'].lower(), 
         architecture_name
     )
+    
+    # Handle resume functionality
+    if resume_from:
+        print(f"\n🔁 RESUME SETUP")
+        print("-" * 50)
+        print(f"🔁 RESUMING from checkpoint: {resume_from}")
+        if resume_iteration is not None:
+            print(f"   Starting from iteration: {resume_iteration}")
+        
+        # Import CheckpointManager for resume functionality
+        from utils.checkpoint_manager import CheckpointManager
+        
+        # Create resume info and copy previous checkpoints
+        resume_info_path = CheckpointManager.create_resume_info(output_dir, resume_from, resume_iteration)
+        print(f"📋 Resume info saved: {resume_info_path}")
     
     # Copy configurations for reproducibility
     arch_config_path = f"multi_agent_architectures/{architecture_name}/config.yaml"
@@ -204,7 +222,9 @@ def demonstrate_multi_agent_optimization(config_path: str = "config.yaml"):
         n_iterations=config['optimization']['n_iterations'], 
         q=config['optimization']['batch_size'],
         save_interval=1,
-        output_dir=output_dir
+        output_dir=output_dir,
+        resume_from=resume_from,
+        resume_iteration=resume_iteration
     )
     
     # Step 5: Analyze results
@@ -303,9 +323,19 @@ def demonstrate_multi_agent_optimization(config_path: str = "config.yaml"):
 
 def main():
     """Main entry point."""
-    config_path = "config.yaml"
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Run Multi-Agent LLM Optimization with optional checkpoint resume')
+    parser.add_argument('--config', default='config.yaml', help='Path to config file (default: config.yaml)')
+    parser.add_argument('--resume-from', type=str, help='Directory to resume from checkpoint')
+    parser.add_argument('--resume-iteration', type=int, help='Specific iteration to resume from (optional)')
+    
+    args = parser.parse_args()
+    
+    # Set config path
+    config_path = args.config
     # if we run in debug the path need to be /teamspace/studios/this_studio/LLM Multi-Agent Optimization Framework/config.yaml
-    config_path = "/teamspace/studios/this_studio/LLM Multi-Agent Optimization Framework/config.yaml"
+    if not os.path.exists(config_path):
+        config_path = "/teamspace/studios/this_studio/LLM Multi-Agent Optimization Framework/config.yaml"
     
     if not os.path.exists(config_path):
         print(f"❌ Configuration file '{config_path}' not found!")
@@ -313,7 +343,7 @@ def main():
         return 1
     
     try:
-        analysis = demonstrate_multi_agent_optimization(config_path)
+        analysis = demonstrate_multi_agent_optimization(config_path, args.resume_from, args.resume_iteration)
         return 0
     except Exception as e:
         print(f"\n❌ ERROR: {str(e)}")
