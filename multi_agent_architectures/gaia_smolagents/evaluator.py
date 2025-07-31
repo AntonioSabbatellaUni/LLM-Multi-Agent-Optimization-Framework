@@ -9,13 +9,47 @@ import os
 import sys
 import numpy as np
 import yaml
+import contextlib
+from pathlib import Path
 from typing import List, Dict, Tuple, Optional
-import importlib.util
 
 # Import the base LLM data processing utilities
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 from data_processor_v2 import find_closest_llm_index
 from env_manager import env_manager
+
+
+
+@contextlib.contextmanager
+def isolated_executor_env(executor_root_path: Path):
+    """
+    Context manager per entrare temporaneamente nell'ambiente dell'Esecutore.
+    Modifica sys.path e la directory di lavoro, e li ripristina all'uscita.
+    
+    Args:
+        executor_root_path: Path to the executor repository root directory
+    """
+    original_cwd = os.getcwd()
+    original_sys_path = sys.path[:]
+    
+    try:
+        # Aggiungi la radice dell'esecutore al path di Python
+        # Questo risolve tutti gli import relativi (es. 'from utils import ...')
+        executor_path_str = str(executor_root_path)
+        if executor_path_str not in sys.path:
+            sys.path.insert(0, executor_path_str)
+        
+        # Spostati nella directory dell'esecutore
+        # Questo risolve i problemi con i percorsi relativi dei file (es. 'data/gaia')
+        os.chdir(executor_root_path)
+        
+        print(f"🔧 Entering isolated executor environment: {executor_root_path}")
+        yield # Qui dentro, il codice si comporterà come se fosse eseguito dall'Esecutore
+        
+    finally:
+        # Ripristina tutto allo stato originale, indipendentemente da errori
+        os.chdir(original_cwd)
+        sys.path[:] = original_sys_path
 
 
 class GaiaBenchmarkEvaluator:
@@ -49,12 +83,15 @@ class GaiaBenchmarkEvaluator:
         
         self.config = self._load_config(config_path)
         
+        # Set up paths for the executor repository
+        self.executor_repo_path = Path(__file__).parent / self.config['repository']['path']
+        self.executor_root_path = self.executor_repo_path / "examples" / "open_deep_research"
+        
         # Validate architecture requirements
         self._validate_setup()
         
-        # Initialize the executor interface (will be implemented after repo cloning)
-        self.executor_interface = None
-        self._init_executor_interface()
+        # Check executor availability (but don't initialize yet)
+        self.executor_available = self._check_executor_availability()
     
     def _load_config(self, config_path: str) -> dict:
         """Load architecture-specific configuration."""
@@ -89,50 +126,24 @@ class GaiaBenchmarkEvaluator:
         
         print(f"✅ GAIA architecture validation passed: {expected_agents} agents")
     
-    def _init_executor_interface(self):
-        """Initialize the connection to the executor repository."""
-        # Check environment before initializing executor
+    def _check_executor_availability(self) -> bool:
+        """Check if the executor repository and interface are available."""
         if not env_manager.is_ready_for_architecture('gaia_smolagents'):
             print("⚠️  Environment not ready for GAIA architecture")
             print("   Some functionality may be limited without proper API keys")
         
-        repo_path = os.path.join(os.path.dirname(__file__), 
-                                self.config['repository']['path'])
-        interface_path = os.path.join(repo_path, 
-                                    self.config['repository']['optimization_interface_path'])
+        if not self.executor_repo_path.exists():
+            print(f"⚠️  Executor repository not found at: {self.executor_repo_path}")
+            print(f"    Please clone the executor repository to: {self.executor_repo_path}")
+            return False
         
-        if not os.path.exists(repo_path):
-            print(f"⚠️  Executor repository not found at: {repo_path}")
-            print(f"    Please clone the executor repository to: {repo_path}")
-            print(f"    Command: git clone <EXECUTOR_REPO_URL> {repo_path}")
-            self.executor_interface = None
-            return
-        
-        if not os.path.exists(interface_path):
+        interface_path = self.executor_root_path / "optimization_interface.py"
+        if not interface_path.exists():
             print(f"⚠️  Optimization interface not found at: {interface_path}")
-            self.executor_interface = None
-            return
+            return False
         
-        try:
-            # Add the repository path to sys.path for relative imports
-            repo_examples_path = os.path.join(repo_path, "examples", "open_deep_research")
-            if repo_examples_path not in sys.path:
-                sys.path.insert(0, repo_examples_path)
-            
-            # Dynamically import the optimization interface
-            spec = importlib.util.spec_from_file_location("optimization_interface", interface_path)
-            optimization_module = importlib.util.module_from_spec(spec)
-            sys.modules["optimization_interface"] = optimization_module
-            spec.loader.exec_module(optimization_module)
-            
-            self.executor_interface = optimization_module
-            print(f"✅ Executor interface loaded from: {interface_path}")
-            
-        except Exception as e:
-            print(f"⚠️  Failed to load executor interface: {e}")
-            print(f"    This is likely due to missing dependencies in the executor repository.")
-            print(f"    Using fallback evaluation instead.")
-            self.executor_interface = None
+        print(f"✅ Executor repository found at: {self.executor_repo_path}")
+        return True
     
     def evaluate_agent_system(self, X_flat: np.ndarray) -> np.ndarray:
         """
@@ -154,7 +165,7 @@ class GaiaBenchmarkEvaluator:
         print(f"   Architecture: {self.config['architecture']['name']}")
         
         # Check if executor is available
-        if self.executor_interface is None:
+        if not self.executor_available:
             print("⚠️  Executor interface not available. Using fallback evaluation.")
             return self._fallback_evaluation(X_flat)
         
@@ -167,11 +178,15 @@ class GaiaBenchmarkEvaluator:
                 print(f"   Mapped to: {config_dict}")
                 
                 # Step 2: Execute real benchmark
-                accuracy, cost = self._execute_real_benchmark(config_dict, run_suffix=f"_{i}")
+                accuracy, cost = self._execute_real_benchmark(config_dict, i)
                 
                 # Step 3: Normalize results for BoTorch
                 normalized_performance = accuracy * self.config['botorch_integration']['performance_normalization']['scale_factor']
                 normalized_cost = -cost if self.config['botorch_integration']['cost_normalization']['method'] == 'negative' else cost
+
+                if normalized_cost == 0:
+                    print(f"   ❌ Invalid cost: {normalized_cost}. Skipping this configuration.")
+                    normalized_cost = -10.0
                 
                 results[i, 0] = normalized_performance
                 results[i, 1] = normalized_cost
@@ -266,34 +281,48 @@ class GaiaBenchmarkEvaluator:
         
         return config_dict
     
-    def _execute_real_benchmark(self, config_dict: Dict[str, Dict], run_suffix: str = "") -> Tuple[float, float]:
+    def _execute_real_benchmark(self, config_dict: Dict[str, Dict], i: int) -> Tuple[float, float]:
         """
-        Execute the real GAIA benchmark with the given configuration.
+        Execute the real GAIA benchmark with the given configuration using context manager.
         
         Args:
             config_dict: Agent model configuration dictionary
-            run_suffix: Suffix for the run name
+            i: Configuration index for logging
             
         Returns:
             Tuple of (accuracy_percentage, cost_dollars)
         """
-        if self.executor_interface is None:
-            raise RuntimeError("Executor interface not available")
-        
-        # Prepare execution parameters
-        dataset_limits = self.config['evaluation']['dataset_limits']
-        run_name = f"{self.config['evaluation']['run_name_prefix']}{run_suffix}"
-        save_detailed = self.config['evaluation']['save_detailed_results']
-        
-        # Call the executor's evaluation function
-        accuracy, cost, _ = self.executor_interface.evaluate_configuration(
-            agent_model_configs=config_dict,
-            dataset_limits=dataset_limits,
-            run_name=run_name,
-            save_detailed_results=save_detailed
-        )
-        
-        return accuracy, cost
+        print(f"🔧 Executing REAL benchmark for configuration {i+1}...  ")
+        try:
+            # We need to ensure the executor environment is isolated
+            # to avoid conflicts with other modules or imports.
+            with isolated_executor_env(self.executor_root_path):
+                from optimization_interface import evaluate_configuration
+
+                # Prepare execution parameters
+                dataset_limits = self.config['evaluation']['dataset_limits']
+                run_name = f"{self.config['evaluation']['run_name_prefix']}_{i}"
+                save_detailed = self.config['evaluation']['save_detailed_results']
+
+                print(f"Start Evaluation: Dataset limits {dataset_limits}, Run name {run_name}, Save detailed: {save_detailed}")
+                #
+                accuracy, cost, _ = evaluate_configuration(
+                    agent_model_configs=config_dict,
+                    dataset_limits=dataset_limits,
+                    run_name=run_name,
+                    save_detailed_results=save_detailed
+                )
+            
+            print(f"  ✅ Results: Accuracy={accuracy:.2f}%, Cost=${cost:.4f}")
+            return accuracy, cost
+
+        except Exception as e:
+            print(f"  ❌ Error during benchmark execution: {e}")
+            import traceback
+            traceback.print_exc() # Print full traceback for debugging
+
+            # Return penalty values
+            return 0.0, 100.0
     
     def _fallback_evaluation(self, X_flat: np.ndarray) -> np.ndarray:
         """
