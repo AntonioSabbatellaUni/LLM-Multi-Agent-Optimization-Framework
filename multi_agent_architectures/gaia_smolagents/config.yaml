@@ -4,10 +4,19 @@
 architecture:
   name: "gaia_smolagents"
   description: "Real benchmark evaluation using GAIA dataset with SmolagentsLibrary"
-  n_agents: 5  # Fixed architecture requirement
+  # n_agents: 5  # Fixed architecture requirement
+  n_agents: 3 # for reducing the total dim of bo and the iteration necessary
   
   # Agent role definitions (order matters for mapping)
   agent_roles:
+    - "manager"
+    - "search_agent" 
+    # - "text_inspector"
+    # - "visual_qa"
+    - "reformulator"
+  
+  # ALL required roles for complete system (including inactive ones)
+  required_roles:
     - "manager"
     - "search_agent" 
     - "text_inspector"
@@ -18,8 +27,8 @@ architecture:
 evaluation:
   # Dataset sampling limits (smaller = faster evaluation)
   dataset_limits:
-    task_1: 1    # Number of level 1 GAIA tasks to evaluate - MINIMAL FOR TESTING
-    task_2: 1    # Number of level 2 GAIA tasks to evaluate - MINIMAL FOR TESTING
+    task_1: 3    # Number of level 1 GAIA tasks to evaluate - MINIMAL FOR TESTING
+    task_2: 0    # Number of level 2 GAIA tasks to evaluate - MINIMAL FOR TESTING
     task_3: 0    # Number of level 3 GAIA tasks to evaluate - DISABLED FOR TESTING
   
   # Execution parameters
@@ -34,6 +43,7 @@ evaluation:
 # Model configuration template
 model_config:
   default_model_class: "LiteLLMModel"  # Default model class for all agents
+  default_model_id: "openrouter/openai/gpt-4.1-mini"  # Default model for missing roles
   
   # Per-role model class overrides (if needed)
   role_specific_classes:

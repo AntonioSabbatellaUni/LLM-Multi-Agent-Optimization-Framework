@@ -7,9 +7,13 @@ import pandas as pd
 import numpy as np
 from typing import Tuple, List, Dict
 
-def load_llm_data(csv_path: str) -> Tuple[np.ndarray, List[str], List[str]]:
+def load_llm_data(csv_path: str, feature_columns: List[str] = None) -> Tuple[np.ndarray, List[str], List[str]]:
     """
     Load and preprocess LLM data from CSV.
+    
+    Args:
+        csv_path: Path to the CSV file
+        feature_columns: List of feature column names to use. If None, uses default set.
     
     Returns:
         - LLM_DATA: Normalized numpy array of shape (M, D) where M=num_LLMs, D=num_features
@@ -23,12 +27,12 @@ def load_llm_data(csv_path: str) -> Tuple[np.ndarray, List[str], List[str]]:
     # Handle missing values (N/A) by forward filling or using median
     df = df.fillna(method='ffill').fillna(df.median(numeric_only=True))
     
-    # Define the features we'll use for optimization
-    # We'll focus on key performance metrics and costs
-    feature_columns = [
-        'MMLU', 'HumanEval', 'GSM8K', 'MATH', 'MT_bench',  # Performance features
-        'Costo_Input_1M', 'Costo_Output_1M'  # Cost features
-    ]
+    # Use provided feature columns or default set
+    if feature_columns is None:
+        feature_columns = [
+            'MMLU', 'HumanEval', 'GSM8K', 'MATH', 'MT_bench',  # Performance features
+            'Costo_Input_1M', 'Costo_Output_1M'  # Cost features
+        ]
     
     # Extract LLM names
     llm_names = df['Modello'].tolist()
@@ -247,11 +251,15 @@ class NumpyLLMEvaluator:
         
         return configurations
 
-def create_evaluator(csv_path: str = 'data/llm_data.csv') -> NumpyLLMEvaluator:
+def create_evaluator(csv_path: str = 'data/llm_data.csv', feature_columns: List[str] = None) -> NumpyLLMEvaluator:
     """
     Convenience function to create an evaluator from CSV data.
+    
+    Args:
+        csv_path: Path to the CSV file
+        feature_columns: List of feature column names to use. If None, uses default set.
     """
-    llm_data, llm_names, feature_names = load_llm_data(csv_path)
+    llm_data, llm_names, feature_names = load_llm_data(csv_path, feature_columns)
     n_agents, agent_roles, agent_token_usage = get_agent_configuration()
     
     evaluator = NumpyLLMEvaluator(

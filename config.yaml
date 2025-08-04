@@ -3,7 +3,7 @@
 
 # Optimization Parameters
 optimization:
-  n_initial: 2         # Number of initial random points - Increased for better exploration
+  n_initial: 3         # Number of initial random points - Increased for better exploration
   n_iterations: 3     # Number of Bayesian Optimization iterations - Increased for real testing
   batch_size: 1        # Number of candidates per iteration (q) - Keep at 1 for stability
   
@@ -39,13 +39,13 @@ agents:
 
 # Features to Use
 features:
-  - "MMLU"
-  - "HumanEval" 
-  - "GSM8K"
-  - "MATH"
-  - "MT_bench"
-  - "Costo_Input_1M"
-  - "Costo_Output_1M"
+  - "MMLU" # Reasoning & Knowledge
+  - "HumanEval" # Coding
+  - "GSM8K" # Scientific Reasoning
+  # - "MATH" # Quantitative Reasoning / Mathematical Reasoning
+  # - "MT_bench" # Conversational Capabilities
+  - "Costo_Input_1M" # Cost Optimization
+  - "Costo_Output_1M" # Cost Optimization
 
 # Data Configuration
 data:

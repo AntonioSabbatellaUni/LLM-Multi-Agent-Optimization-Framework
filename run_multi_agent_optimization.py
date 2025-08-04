@@ -55,7 +55,7 @@ def load_architecture_config(architecture_name: str) -> dict:
         sys.exit(1)
 
 
-def create_evaluator_for_architecture(architecture_name: str, arch_config: dict):
+def create_evaluator_for_architecture(architecture_name: str, arch_config: dict, config: dict) -> object:
     """Create the appropriate evaluator based on architecture selection."""
     print(f"\n🏗️ CREATING EVALUATOR FOR ARCHITECTURE: {architecture_name}")
     print("-" * 60)
@@ -79,8 +79,10 @@ def create_evaluator_for_architecture(architecture_name: str, arch_config: dict)
         
         # Load LLM data for projection
         from data_processor_v2 import load_llm_data
-        llm_data, llm_names, feature_names = load_llm_data('data/llm_data.csv')
-        
+        feature_llm_columns = config.get('features', []) # Use config features for each llm if available
+        llm_data, llm_names, feature_names = load_llm_data('data/llm_data.csv', 
+                                                           feature_columns=feature_llm_columns)
+
         # Get n_agents from architecture config
         n_agents = arch_config['architecture']['n_agents']
         print(f"   GAIA architecture requires {n_agents} agents")
@@ -143,6 +145,7 @@ def demonstrate_multi_agent_optimization(config_path: str = "config.yaml", resum
     # Step 0: Load configurations
     config = load_config(config_path)
     architecture_name = config['evaluation']['architecture']
+    # load the config file in  multi_agent_architectures/{architecture_name}/config.yaml
     arch_config = load_architecture_config(architecture_name)
     
     print_banner(architecture_name, resume_from)
@@ -176,28 +179,31 @@ def demonstrate_multi_agent_optimization(config_path: str = "config.yaml", resum
     print("\n📊 STEP 1: INITIALIZING EVALUATION SYSTEM")
     print("-" * 50)
     
-    evaluator = create_evaluator_for_architecture(architecture_name, arch_config)
+    evaluator = create_evaluator_for_architecture(architecture_name, arch_config, config)
     
     # Step 3: Set up BoTorch parameters  
     dimension = evaluator.n_agents * len(evaluator.feature_names)
     
+    # array with [[lower_bound (0)] * dimension, [upper_bound (1)] * dimension]
     bounds = torch.tensor([
         [config['bounds']['lower']] * dimension,
         [config['bounds']['upper']] * dimension
     ], dtype=torch.double)
     
+    # Usually [-0.1, 1.1] all new points will be better than this reference point
     ref_point = torch.tensor([
         config['reference_point']['performance'],
         config['reference_point']['cost']
     ], dtype=torch.double)
     
+
     # Initialize optimizer
     optimizer = BoTorchOptimizer(evaluator, bounds=bounds, ref_point=ref_point, output_dir=output_dir)
     
     # Display setup information
     print(f"\nOptimization setup:")
     print(f"  • Architecture: {architecture_name}")
-    print(f"  • Agents: {evaluator.n_agents}")
+    print(f"  • Agents Number to optimize: {evaluator.n_agents}")
     print(f"  • Features: {len(evaluator.feature_names)}")
     print(f"  • Dimension: {dimension}")
     print(f"  • Device: {optimizer.device}")
