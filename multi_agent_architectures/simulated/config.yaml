@@ -1,0 +1,49 @@
+# Simulated Multi-Agent Architecture Configuration
+
+# Architecture identification  
+architecture:
+  name: "simulated"
+  description: "Fast simulated evaluation using CSV-based LLM data projection"
+  n_agents: 3  # Configurable number of agents
+  
+  # Agent role definitions (configurable)
+  agent_roles:
+    - "MMLU"
+    - "HumanEval" 
+    - "MATH"
+  
+  # Role to feature mapping
+  role_to_feature:
+    MMLU: 0
+    HumanEval: 1
+    MATH: 3
+
+# Evaluation parameters
+evaluation:
+  method: "distance_projection"  # How to map continuous space to LLMs
+  performance_simulation: "csv_based"  # Use CSV data for performance estimation
+  cost_simulation: "token_based"       # Use token-based cost calculation
+
+# Features configuration
+features:
+  feature_names:
+    - "MMLU"
+    - "HumanEval" 
+    - "GSM8K"
+    - "MATH"
+    - "MT_bench"
+    - "Costo_Input_1M"
+    - "Costo_Output_1M"
+
+# Data source
+data:
+  source_file: "data/llm_data.csv"  # Relative to main framework directory
+
+# BoTorch integration settings
+botorch_integration:
+  performance_bounds: [0.0, 1.0]   # Expected performance range
+  cost_bounds: [0.0, 10.0]         # Expected cost range
+  
+  # Normalization settings
+  normalize_performance: true
+  normalize_cost: true

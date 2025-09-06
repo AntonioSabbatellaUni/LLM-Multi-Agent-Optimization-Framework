@@ -266,3 +266,4 @@ docs/_build/
 .readthedocs.yml
 data/gaia/2023/test/0c393561-dd13-4b7c-ac49-20ac469aa276.MOV
 data/gaia/2023/*
+experiments/*/cost_report.txt

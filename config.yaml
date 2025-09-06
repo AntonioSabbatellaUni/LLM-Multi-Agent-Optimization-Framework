@@ -3,8 +3,8 @@
 
 # Optimization Parameters
 optimization:
-  n_initial: 3         # Number of initial random points - Increased for better exploration
-  n_iterations: 3     # Number of Bayesian Optimization iterations - Increased for real testing
+  n_initial: 16         # Number of initial random points - Increased for better exploration
+  n_iterations: 15     # Number of Bayesian Optimization iterations - Increased for real testing
   batch_size: 1        # Number of candidates per iteration (q) - Keep at 1 for stability
   
 # Model Parameters
@@ -29,7 +29,7 @@ evaluation:
   # Architecture configs loaded from multi_agent_architectures/<architecture>/config.yaml
 
 # Agent Configuration (for simulated architecture - overridden by GAIA)
-agents:
+agents: # Only used in the SIMULATED architecture, the agents are specified in /gaia_smolagents/config.yaml
   n_agents: 5  # Will be overridden to 5 for GAIA architecture
   roles: ["manager", "search_agent", "text_inspector", "visual_qa", "reformulator"]
   role_to_feature:

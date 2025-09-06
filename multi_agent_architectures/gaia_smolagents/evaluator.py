@@ -69,7 +69,7 @@ class GaiaBenchmarkEvaluator:
             llm_data: Array of LLM feature data for projection
             llm_names: List of LLM names corresponding to data rows
             feature_names: List of feature names (MMLU, HumanEval, etc.)
-            n_agents: Number of agents (must be 5 for GAIA architecture)
+            n_agents: Number of agents (should be 5 for GAIA architecture - if less than 5, it will use default LLMs)
             config_path: Path to architecture-specific config file
         """
         self.llm_data = llm_data
@@ -177,6 +177,11 @@ class GaiaBenchmarkEvaluator:
                 config_dict = self._project_to_llm_configuration(X_flat[i], n_features)
                 print(f"   Mapped to: {config_dict}")
                 
+                # Step 1.5: Complete configuration with default models for missing roles
+                config_dict = self._complete_agent_configuration(config_dict)
+                config_summary = ', '.join([f'{role}={cfg["model_id"].split("/")[-1]}' for role, cfg in config_dict.items()])
+                print(f"   Complete config: {config_summary}")
+
                 # Step 2: Execute real benchmark
                 accuracy, cost = self._execute_real_benchmark(config_dict, i)
                 
@@ -278,6 +283,21 @@ class GaiaBenchmarkEvaluator:
                 'model_class': role_specific_class,
                 'model_id': llm_name
             }
+        
+        return config_dict
+
+    def _complete_agent_configuration(self, config_dict: Dict[str, Dict]) -> Dict[str, Dict]:
+        """Complete configuration with default models for missing agent roles."""
+        required_roles = self.config['architecture']['required_roles']
+        default_model_class = self.config['model_config']['default_model_class']
+        default_model_id = self.config['model_config']['default_model_id']
+        
+        for role in required_roles:
+            if role not in config_dict:
+                config_dict[role] = {
+                    'model_class': default_model_class,
+                    'model_id': default_model_id
+                }
         
         return config_dict
     
