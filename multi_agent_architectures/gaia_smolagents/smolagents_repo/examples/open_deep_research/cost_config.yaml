@@ -1,0 +1,189 @@
+# Cost configuration for LLM models used in GAIA evaluation
+# Prices are in USD per 1M tokens
+# Last updated: July 2025
+
+models:
+  # OpenAI Models
+  gpt-4o:
+    provider: "OpenAI"
+    input_cost_per_1m_tokens: 2.50
+    output_cost_per_1m_tokens: 10.00
+    context_window: 128000
+    
+  gpt-4o-mini:
+    provider: "OpenAI"
+    input_cost_per_1m_tokens: 0.15
+    output_cost_per_1m_tokens: 0.60
+    context_window: 128000
+    
+  gpt-4-turbo:
+    provider: "OpenAI"
+    input_cost_per_1m_tokens: 10.00
+    output_cost_per_1m_tokens: 30.00
+    context_window: 128000
+    
+  gpt-3.5-turbo:
+    provider: "OpenAI"
+    input_cost_per_1m_tokens: 0.50
+    output_cost_per_1m_tokens: 1.50
+    context_window: 16385
+
+  gpt-4.1:
+    provider: "OpenAI"
+    input_cost_per_1m_tokens: 2.00
+    output_cost_per_1m_tokens: 8.00
+    context_window: 1000000
+    
+  gpt-4.1-mini:
+    provider: "OpenAI"
+    input_cost_per_1m_tokens: 0.40
+    output_cost_per_1m_tokens: 1.60
+    context_window: 1000000
+    
+  gpt-4.1-nano:
+    provider: "OpenAI"
+    input_cost_per_1m_tokens: 0.10
+    output_cost_per_1m_tokens: 0.40
+    context_window: 1000000
+
+  # OpenAI o-series models
+  o3-mini:
+    provider: "OpenAI"
+    input_cost_per_1m_tokens: 1.10
+    output_cost_per_1m_tokens: 4.40
+    context_window: 200000
+    
+  o4-mini:
+    provider: "OpenAI"
+    input_cost_per_1m_tokens: 1.10
+    output_cost_per_1m_tokens: 4.40
+    context_window: 200000
+    
+  # Claude 4 Models
+  claude-opus-4:
+    provider: "Anthropic"
+    input_cost_per_1m_tokens: 15.00
+    output_cost_per_1m_tokens: 75.00
+    context_window: 200000
+    
+  claude-sonnet-4:
+    provider: "Anthropic"
+    input_cost_per_1m_tokens: 3.00
+    output_cost_per_1m_tokens: 15.00
+    context_window: 200000
+
+  claude-3.5-haiku-20241022:
+    provider: "Anthropic"
+    input_cost_per_1m_tokens: 0.80
+    output_cost_per_1m_tokens: 4.00
+    context_window: 200000
+    provider: "Anthropic"
+    input_cost_per_1m_tokens: 15.00
+    output_cost_per_1m_tokens: 75.00
+    context_window: ~200000
+    
+  claude-sonnet-4:
+    provider: "Anthropic"
+    input_cost_per_1m_tokens: 3.00
+    output_cost_per_1m_tokens: 15.00
+    context_window: ~200000
+
+  # Anthropic Models
+  claude-3-5-sonnet-20241022:
+    provider: "Anthropic"
+    input_cost_per_1m_tokens: 3.00
+    output_cost_per_1m_tokens: 15.00
+    context_window: 200000
+    
+  claude-3-haiku-20240307:
+    provider: "Anthropic"
+    input_cost_per_1m_tokens: 0.25
+    output_cost_per_1m_tokens: 1.25
+    context_window: 200000
+
+  # Google Models (updated with current versions)
+  gemini-2.5-pro:
+    provider: "Google"
+    input_cost_per_1m_tokens: 1.25
+    output_cost_per_1m_tokens: 5.00
+    context_window: 2000000
+
+  gemini-2.0-flash-001:
+    provider: "Google"
+    input_cost_per_1m_tokens: 0.15
+    output_cost_per_1m_tokens: 0.60
+    context_window: 1000000
+
+  gemini-1.5-pro:
+    provider: "Google"
+    input_cost_per_1m_tokens: 1.25
+    output_cost_per_1m_tokens: 5.00
+    context_window: 1000000
+    
+  gemini-1.5-flash:
+    provider: "Google"
+    input_cost_per_1m_tokens: 0.075
+    output_cost_per_1m_tokens: 0.30
+    context_window: 1000000
+
+  # Meta Models (updated with current versions)
+  llama-3.2-3b-instruct:
+    provider: "Meta/OpenRouter"
+    input_cost_per_1m_tokens: 0.003
+    output_cost_per_1m_tokens: 0.006
+    context_window: 20000
+
+  llama-3.3-70b-instruct:
+    provider: "Meta/OpenRouter"
+    input_cost_per_1m_tokens: 0.25
+    output_cost_per_1m_tokens: 0.70
+    context_window: 128000
+
+  meta-llama/Llama-3.1-70B-Instruct-Turbo:
+    provider: "Meta/Together AI"
+    input_cost_per_1m_tokens: 0.88
+    output_cost_per_1m_tokens: 0.88
+    context_window: 128000
+    
+  meta-llama/Llama-3.1-8B-Instruct-Turbo:
+    provider: "Meta/Together AI"
+    input_cost_per_1m_tokens: 0.18
+    output_cost_per_1m_tokens: 0.18
+    context_window: 128000
+
+  # Qwen Models
+  qwen3-14b:
+    provider: "Alibaba/OpenRouter"
+    input_cost_per_1m_tokens: 0.10
+    output_cost_per_1m_tokens: 0.40
+    context_window: 128000
+
+  # xAI Models
+  grok-3-beta:
+    provider: "xAI/OpenRouter"
+    input_cost_per_1m_tokens: 5.00
+    output_cost_per_1m_tokens: 20.00
+    context_window: 128000
+
+  # DeepSeek Models
+  deepseek-chat:
+    provider: "DeepSeek"
+    input_cost_per_1m_tokens: 0.27
+    output_cost_per_1m_tokens: 1.10
+    context_window: 64000
+
+  # Alibaba Models
+  qwen-plus:
+    provider: "Alibaba"
+    input_cost_per_1m_tokens: 0.50
+    output_cost_per_1m_tokens: 1.50
+    context_window: 131072
+
+# Default model to use when specific model is not found
+default_model: "gpt-4.1-nano"
+
+# Notes:
+# - Prices may vary by region and are subject to change
+# - Check provider documentation for the most current pricing
+# - Some providers offer volume discounts
+# - Context window sizes may affect pricing for very long inputs

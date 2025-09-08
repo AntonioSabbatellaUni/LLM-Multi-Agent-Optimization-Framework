@@ -1,0 +1,58 @@
+experiment_id: "gaia_subset_experiment"
+
+# Seed for reproducible dataset selection
+random_seed: 42
+
+# Cost estimation configuration
+cost_config:
+  config_file: "cost_config.yaml"  # Path to cost configuration file
+  default_model: "gpt-4.1-nano"     # Model to use for cost estimation if not specified
+
+# Processing configuration
+processing:
+  concurrency: 4  # Number of parallel workers
+  max_cost_budget: null  # Optional cost limit (disabled for now)
+
+# Dataset limits per task level
+dataset_limits:
+  task_1: 3  # Easy tasks
+  task_2: 0  # Medium tasks  
+  task_3: 0  # Hard tasks
+
+# Retry configuration
+retry_config:
+  max_retries: 3
+  base_delay: 1.0  # seconds
+  backoff_factor: 2.0
+
+# Agent model configurations
+agents:
+  # Main orchestrator agent
+  manager:
+    model_class: LiteLLMModel
+    model_id: openrouter/mistralai/devstral-small
+    max_tokens: 8096
+  
+  # Web search specialist agent  
+  search_agent:
+    model_class: LiteLLMModel
+    model_id: openrouter/mistralai/devstral-small
+    max_tokens: 8096
+  
+  # Text analysis tool
+  text_inspector:
+    model_class: LiteLLMModel
+    model_id: openrouter/mistralai/devstral-small
+    max_tokens: 8096
+  
+  # Visual analysis tool (requires multimodal model)
+  visual_qa:
+    model_class: LiteLLMModel
+    model_id: gpt-4o-mini
+    max_tokens: 4096
+  
+  # Response post-processing
+  reformulator:
+    model_class: LiteLLMModel
+    model_id: openrouter/mistralai/devstral-small
+    max_tokens: 4096
