@@ -35,8 +35,14 @@ class CostEstimator:
             "gpt-4o": (2.5, 10.0, 128_000),         # CSV: 2.5, 10.0 ✓
             "gpt-4-turbo": (10.0, 30.0, 128_000),   # Not in CSV, keeping
             "gpt-3.5-turbo": (0.5, 1.5, 16_000),    # Not in CSV, keeping
+            "gpt-oss-20b-1": (0.05, 0.2, 128_000),  # CSV: 0.05, 0.2 (added)
             "o3-mini": (1.1, 4.4, 200_000),         # CSV: 1.1, 4.4
             "o4-mini": (1.1, 4.4, 200_000),         # CSV: 1.1, 4.4
+        }
+        
+        # Amazon - Added from CSV
+        amazon_models = {
+            "us.amazon.nova-micro-v1": (0.04, 0.14, 128_000),  # CSV: 0.04, 0.14
         }
         
         # Anthropic - Updated from CSV
@@ -63,7 +69,7 @@ class CostEstimator:
             "llama-3.2-3b-instruct": (0.003, 0.006, 20_000),                    # CSV: 0.003, 0.006
             "meta-llama-llama-3.1-8b-instruct-turbo": (0.015, 0.02, 131_000),   # CSV: 0.015, 0.02
             "meta-llama-llama-3.1-70b-instruct-turbo": (0.88, 0.88, 131_072),   # Not in CSV, keeping
-            "llama-3.3-70b-instruct": (0.25, 0.7, 128_000),                     # CSV: 0.25, 0.7
+            "llama-3.3-70b-instruct": (0.54, 0.68, 128_000),                    # CSV: 0.54, 0.68 (updated)
             "llama-4-maverick": (0.27, 0.85, 1_000_000),                        # CSV: 0.27, 0.85 (added)
             "llama-4-scout": (0.18, 0.59, 10_000_000),                          # CSV: 0.18, 0.59 (added)
         }
@@ -72,8 +78,9 @@ class CostEstimator:
         qwen_models = {
             "qwen3-14b": (0.1, 0.4, 128_000),                      # CSV: 0.1, 0.4
             "qwen-qwen3-235b-a22b-07-25": (0.5, 2.0, 128_000),     # CSV: 0.5, 2.0
-            "qwen3-32b": (0.2, 0.8, 128_000),                      # CSV: 0.2, 0.8 (added)
+            "qwen3-32b": (0.7, 8.4, 128_000),                      # CSV: 0.7, 8.4 (updated)
             "qwen3-8b": (0.035, 0.138, 128_000),                   # CSV: 0.035, 0.138 (added)
+            "qwen-qwen3-30b-a3b-v1": (0.2, 2.4, 128_000),          # CSV: 0.2, 2.4 (added)
         }
         
         # xAI - Updated from CSV
@@ -85,13 +92,14 @@ class CostEstimator:
         deepseek_models = {
             "deepseek-r1-0528": (2.0, 8.0, 200_000),               # CSV: 2.0, 8.0 (added)
             "deepseek-chat-v3-0324": (1.8, 7.0, 200_000),          # CSV: 1.8, 7.0 (added)
+            "deepseek-v3": (0.27, 1.0, 64_000),                    # CSV: 0.27, 1.0 (added)
             "deepseek-chat": (0.14, 0.28, 64_000),                 # Legacy, keeping
         }
         
         # Mistral - Updated from CSV
         mistral_models = {
             "codestral-2501": (0.3, 0.9, 256_000),                 # CSV: 0.3, 0.9 (added)
-            "mistral-7b-instruct": (0.25, 0.25, 32_000),           # CSV: 0.25, 0.25 (added)
+            "mistral-7b-instruct": (0.25, 0.25, 32_000),           # CSV: 0.25, 0.25 ✓
             "magistral-medium-2506": (0.4, 2.0, 32_000),           # CSV: 0.4, 2.0 (added)
             "mistral-large": (2.0, 6.0, 128_000),                  # Legacy, keeping
         }
@@ -105,7 +113,7 @@ class CostEstimator:
         
         # Merge all models with proper field names
         for provider_models in [openai_models, anthropic_models, google_models, 
-                               meta_models, qwen_models, xai_models, deepseek_models, mistral_models, gemma_models]:
+                               meta_models, qwen_models, xai_models, deepseek_models, mistral_models, gemma_models, amazon_models]:
             for model, (input_cost, output_cost, context) in provider_models.items():
                 models[model] = {
                     "input_cost_per_1m_tokens": input_cost,
@@ -187,6 +195,10 @@ class CostEstimator:
         name = model_name.lower()
         if "openrouter/" in name:
             name = name.replace("openrouter/", "").replace("/", "-")
+            
+        # Handle bedrock models - extract model name after last '/'
+        if "bedrock" in name:
+            name = name.split("/")[-1]
         
         # Exact match check
         available_models = list(self.cost_config["models"].keys())
