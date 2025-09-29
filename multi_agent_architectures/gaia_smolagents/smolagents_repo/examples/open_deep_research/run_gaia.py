@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import datasets
+import litellm
 import pandas as pd
 from dotenv import load_dotenv
 from huggingface_hub import login, snapshot_download
@@ -184,6 +185,7 @@ def answer_single_question(
         model_params["max_tokens"] = 4096
     model = LiteLLMModel(**model_params)
     # model = InferenceClientModel(model_id="Qwen/Qwen3-32B", provider="novita", max_tokens=4096)
+    litellm.drop_params=True # remove errors for model that do not support some params (e.g. ['stop'], for model=qwen.qwen3-32b-v1:0)
     document_inspection_tool = TextInspectorTool(model, 100000)
 
     agent = create_agent_team(model)

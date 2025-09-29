@@ -36,6 +36,7 @@ class CostEstimator:
             "gpt-4-turbo": (10.0, 30.0, 128_000),   # Not in CSV, keeping
             "gpt-3.5-turbo": (0.5, 1.5, 16_000),    # Not in CSV, keeping
             "gpt-oss-20b-1": (0.05, 0.2, 128_000),  # CSV: 0.05, 0.2 (added)
+            "gpt-oss-120b-1": (0.15, 0.6, 128_000),  # CSV: 0.15, 0.6 (added)
             "o3-mini": (1.1, 4.4, 200_000),         # CSV: 1.1, 4.4
             "o4-mini": (1.1, 4.4, 200_000),         # CSV: 1.1, 4.4
         }
