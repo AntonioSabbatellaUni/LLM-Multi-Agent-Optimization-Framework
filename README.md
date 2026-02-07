@@ -1,7 +1,11 @@
 # LLM Multi-Agent Optimization Framework
 
+<img src="https://github.com/user-attachments/assets/c9fb9313-5198-4aac-8958-e28eefaa679a" alt="Multi-agent architecture overview" style="max-width:70%; display:block; margin: 1rem auto;">
+
 ## 🎯 Overview
-This framework implements sophisticated multi-objective optimization approaches to find optimal trade-offs between **Performance** and **Cost** when assigning Large Language Models (LLMs) to agents in a multi-agent system.
+This framework implements multi-objective optimization approaches to find optimal trade-offs between **Performance** and **Cost** when assigning Large Language Models (LLMs) to agents in a multi-agent system.
+
+<img src="https://github.com/user-attachments/assets/c8ed6478-8651-49ab-b86f-6641967e0458" alt="Evolution of the Pareto front" style="max-width:70%; display:block; margin: 1.5rem auto;">
 
 ### 🔬 Optimization Methods Available:
 - **Heuristic Multi-Objective**: Fast exploration using genetic algorithm-style approach
