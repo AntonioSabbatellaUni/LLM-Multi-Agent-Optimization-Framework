@@ -22,7 +22,7 @@ def load_llm_data(csv_path: str) -> Tuple[torch.Tensor, List[str], List[str]]:
     print(f"Loaded {len(df)} LLMs from {csv_path}")
     
     # Handle missing values (N/A) by forward filling or using median
-    df = df.fillna(method='ffill').fillna(df.median(numeric_only=True))
+    df = df.ffill().fillna(df.median(numeric_only=True))
     
     # Define the features we'll use for optimization
     # We'll focus on key performance metrics and costs

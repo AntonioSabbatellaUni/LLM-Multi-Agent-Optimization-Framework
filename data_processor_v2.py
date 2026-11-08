@@ -25,7 +25,7 @@ def load_llm_data(csv_path: str, feature_columns: List[str] = None) -> Tuple[np.
     print(f"Loaded {len(df)} LLMs from {csv_path}")
     
     # Handle missing values (N/A) by forward filling or using median
-    df = df.fillna(method='ffill').fillna(df.median(numeric_only=True))
+    df = df.ffill().fillna(df.median(numeric_only=True))
     
     # Use provided feature columns or default set
     if feature_columns is None:
