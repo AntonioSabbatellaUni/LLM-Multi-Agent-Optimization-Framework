@@ -80,7 +80,7 @@ def create_evaluator_for_architecture(architecture_name: str, arch_config: dict,
         # Load LLM data for projection
         from data_processor_v2 import load_llm_data
         feature_llm_columns = config.get('features', []) # Use config features for each llm if available
-        llm_data, llm_names, feature_names = load_llm_data('data/llm_data.csv', 
+        llm_data, llm_names, feature_names = load_llm_data(config.get('data', {}).get('input_file', 'data/llm_data.csv'), 
                                                            feature_columns=feature_llm_columns)
 
         # Get n_agents from architecture config

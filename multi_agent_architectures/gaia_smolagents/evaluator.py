@@ -281,10 +281,20 @@ class GaiaBenchmarkEvaluator:
             
             config_dict[role] = {
                 'model_class': role_specific_class,
-                'model_id': llm_name
+                'model_id': llm_name,
+                **self._extra_model_kwargs()
             }
         
         return config_dict
+
+    def _extra_model_kwargs(self) -> Dict:
+        """Per-model kwargs (api_base, api_key, max_tokens...) for self-hosted endpoints.
+        From model_config.extra_model_kwargs and/or env MALBO_API_BASE (revival)."""
+        kw = dict(self.config.get('model_config', {}).get('extra_model_kwargs') or {})
+        if os.getenv('MALBO_API_BASE'):
+            kw.update(api_base=os.environ['MALBO_API_BASE'], api_key=os.getenv('MALBO_API_KEY', 'dummy'),
+                      max_tokens=int(os.getenv('MALBO_MAX_TOKENS', 1500)))
+        return kw
 
     def _complete_agent_configuration(self, config_dict: Dict[str, Dict]) -> Dict[str, Dict]:
         """Complete configuration with default models for missing agent roles."""
@@ -296,7 +306,8 @@ class GaiaBenchmarkEvaluator:
             if role not in config_dict:
                 config_dict[role] = {
                     'model_class': default_model_class,
-                    'model_id': default_model_id
+                    'model_id': os.getenv('MALBO_DEFAULT_MODEL_ID', default_model_id),
+                    **self._extra_model_kwargs()
                 }
         
         return config_dict
@@ -320,7 +331,9 @@ class GaiaBenchmarkEvaluator:
                 from optimization_interface import evaluate_configuration
 
                 # Prepare execution parameters
-                dataset_limits = self.config['evaluation']['dataset_limits']
+                dataset_limits = dict(self.config['evaluation']['dataset_limits'])
+                if os.getenv('MALBO_TASK1'):
+                    dataset_limits['task_1'] = int(os.environ['MALBO_TASK1'])
                 run_name = f"{self.config['evaluation']['run_name_prefix']}_{i}"
                 save_detailed = self.config['evaluation']['save_detailed_results']
 

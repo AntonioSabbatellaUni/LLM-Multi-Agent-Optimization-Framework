@@ -1,0 +1,3 @@
+Modello,MMLU,HellaSwag,HumanEval,GSM8K,GPQA_Diamond,AIME_2025,ARC,TruthfulQA,AGIEval,BBH,MATH,MT_bench,Media_Totale,Costo_Input_1M,Costo_Output_1M,Costo_Blended_1M,Context_Window,Fonti
+openai/lfm,65,50,55,80,50,50,50,50,50,50,50,50,50,0.05,0.15,0.1,200K,smoke-test placeholder
+openai/lfm-b,45,50,35,60,50,50,50,50,50,50,50,50,50,0.02,0.06,0.04,200K,smoke-test placeholder
