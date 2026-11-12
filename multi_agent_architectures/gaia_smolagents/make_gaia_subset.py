@@ -3,7 +3,8 @@
 
 Needs: huggingface_hub (+ pandas only if the snapshot has parquet but no jsonl). Needs HF_TOKEN
 (env var, or the line HF_TOKEN=... in ~/.config/malbo/.env) with access to the gated gaia-benchmark/GAIA.
-Does NOT use datasets / GAIA.py (broken with datasets>=4): reads 2023/validation/metadata.jsonl directly.
+Does NOT use datasets / GAIA.py (broken with datasets>=4). The real repo ships 2023/validation/metadata.parquet
+(no .jsonl) -> parquet fallback (needs pandas + pyarrow).
 
 Run:   python make_gaia_subset.py [--n 30] [--seed 42] [--local-dir ./data_gaia_snapshot]
 Out:   gaia_subset_seed42_n30.json   (task_ids + level + has_file)
