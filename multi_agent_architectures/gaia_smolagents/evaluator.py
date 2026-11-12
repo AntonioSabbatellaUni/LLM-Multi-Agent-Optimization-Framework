@@ -52,6 +52,21 @@ def isolated_executor_env(executor_root_path: Path):
         sys.path[:] = original_sys_path
 
 
+def effective_agent_roles(config: dict) -> List[str]:
+    """Optimized roles: architecture.agent_roles + enabled optional roles (e.g. visual_qa)."""
+    roles = list(config['architecture']['agent_roles'])
+    for name, opt in (config['architecture'].get('optional_roles') or {}).items():
+        if opt.get('enabled') and name not in roles:
+            roles.append(name)
+    return roles
+
+
+def load_architecture_roles(config_path: Optional[str] = None) -> List[str]:
+    config_path = config_path or os.path.join(os.path.dirname(__file__), 'config.yaml')
+    with open(config_path) as f:
+        return effective_agent_roles(yaml.safe_load(f))
+
+
 class GaiaBenchmarkEvaluator:
     """
     Adapter class that connects BoTorch optimization with real GAIA benchmark execution.
@@ -61,7 +76,8 @@ class GaiaBenchmarkEvaluator:
     """
     
     def __init__(self, llm_data: np.ndarray, llm_names: List[str], feature_names: List[str], 
-                 n_agents: int, config_path: Optional[str] = None):
+                 n_agents: int, config_path: Optional[str] = None,
+                 supports_image: Optional[np.ndarray] = None):
         """
         Initialize the GAIA benchmark evaluator.
         
@@ -76,12 +92,17 @@ class GaiaBenchmarkEvaluator:
         self.llm_names = llm_names
         self.feature_names = feature_names
         self.n_agents = n_agents
+        # boolean mask over llm_names: True = model accepts image input (pool CSV column `supports_image`)
+        self.supports_image = None if supports_image is None else np.asarray(supports_image, dtype=bool)
         
         # Load architecture-specific configuration
         if config_path is None:
             config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
         
         self.config = self._load_config(config_path)
+        self.agent_roles = effective_agent_roles(self.config)
+        if 'visual_qa' in self.agent_roles and (self.supports_image is None or not self.supports_image.any()):
+            raise ValueError("visual_qa is optimized but the pool has no `supports_image` column / no image-capable model")
         
         # Set up paths for the executor repository
         self.executor_repo_path = Path(__file__).parent / self.config['repository']['path']
@@ -109,15 +130,13 @@ class GaiaBenchmarkEvaluator:
     
     def _validate_setup(self):
         """Validate that the architecture setup is correct."""
-        expected_agents = self.config['architecture']['n_agents']
         
+        expected_agents = len(self.agent_roles)
         if self.n_agents != expected_agents:
             raise ValueError(
-                f"Architecture mismatch: Expected {expected_agents} agents for GAIA, "
-                f"but got {self.n_agents}. Please check your main config.yaml."
+                f"Architecture mismatch: {expected_agents} optimized roles {self.agent_roles} but n_agents={self.n_agents}."
             )
-        
-        expected_roles = len(self.config['architecture']['agent_roles'])
+        expected_roles = len(self.agent_roles)
         if expected_roles != expected_agents:
             raise ValueError(
                 f"Configuration error: {expected_agents} agents specified but "
@@ -175,7 +194,7 @@ class GaiaBenchmarkEvaluator:
             try:
                 # Step 1: Project continuous vector to real LLM configurations
                 config_dict = self._project_to_llm_configuration(X_flat[i], n_features)
-                print(f"   Mapped to: {config_dict}")
+                print(f"   Mapped to: {self._redact(config_dict)}")
                 
                 # Step 1.5: Complete configuration with default models for missing roles
                 config_dict = self._complete_agent_configuration(config_dict)
@@ -235,7 +254,7 @@ class GaiaBenchmarkEvaluator:
             
             # Convert to the format expected by analysis functions
             agents_config = []
-            agent_roles = self.config['architecture']['agent_roles']
+            agent_roles = self.agent_roles
             
             for agent_idx, role in enumerate(agent_roles):
                 agents_config.append({
@@ -265,11 +284,15 @@ class GaiaBenchmarkEvaluator:
         # Reshape to (n_agents, n_features)
         X_agents = X_single.reshape(self.n_agents, n_features)
         
-        # Find closest LLM for each agent using existing projection logic
+        # Find closest LLM for each agent using existing projection logic; visual_qa only among image-capable models
         llm_indices = find_closest_llm_index(X_agents, self.llm_data)
+        for idx, role in enumerate(self.agent_roles):
+            if role == 'visual_qa' and self.supports_image is not None:
+                cand = np.flatnonzero(self.supports_image)
+                llm_indices[idx] = cand[find_closest_llm_index(X_agents[idx:idx + 1], self.llm_data[cand])[0]]
         
         # Build configuration dictionary for the executor
-        agent_roles = self.config['architecture']['agent_roles']
+        agent_roles = self.agent_roles
         model_class = self.config['model_config']['default_model_class']
         
         config_dict = {}
@@ -282,18 +305,28 @@ class GaiaBenchmarkEvaluator:
             config_dict[role] = {
                 'model_class': role_specific_class,
                 'model_id': llm_name,
-                **self._extra_model_kwargs()
+                **self._extra_model_kwargs(role)
             }
         
         return config_dict
 
-    def _extra_model_kwargs(self) -> Dict:
+    @staticmethod
+    def _redact(cfg: Dict) -> Dict:
+        """Copy of a role->model-kwargs dict that is safe to print (api_key hidden)."""
+        return {r: {k: ('***' if k == 'api_key' else v) for k, v in c.items()} for r, c in cfg.items()}
+
+    def _extra_model_kwargs(self, role: Optional[str] = None) -> Dict:
         """Per-model kwargs (api_base, api_key, max_tokens...) for self-hosted endpoints.
         From model_config.extra_model_kwargs and/or env MALBO_API_BASE (revival)."""
         kw = dict(self.config.get('model_config', {}).get('extra_model_kwargs') or {})
         if os.getenv('MALBO_API_BASE'):
             kw.update(api_base=os.environ['MALBO_API_BASE'], api_key=os.getenv('MALBO_API_KEY', 'dummy'),
                       max_tokens=int(os.getenv('MALBO_MAX_TOKENS', 1500)))
+            if os.getenv('OPENCODE_API_KEY') and not os.getenv('MALBO_API_KEY'):
+                kw['api_key'] = os.environ['OPENCODE_API_KEY']
+        # some free Go models 422 on list-of-parts messages; visual_qa needs real content parts so it is never flattened
+        if os.getenv('MALBO_FLATTEN') == '1' and role != 'visual_qa':
+            kw['flatten_messages_as_text'] = True
         return kw
 
     def _complete_agent_configuration(self, config_dict: Dict[str, Dict]) -> Dict[str, Dict]:
@@ -304,10 +337,13 @@ class GaiaBenchmarkEvaluator:
         
         for role in required_roles:
             if role not in config_dict:
+                model_id = os.getenv('MALBO_DEFAULT_MODEL_ID', default_model_id)
+                if role == 'visual_qa':  # fixed vision model when not optimized
+                    model_id = os.getenv('MALBO_VISUAL_QA_MODEL_ID', 'openai/deepseek-v4.1-flash')
                 config_dict[role] = {
                     'model_class': default_model_class,
-                    'model_id': os.getenv('MALBO_DEFAULT_MODEL_ID', default_model_id),
-                    **self._extra_model_kwargs()
+                    'model_id': model_id,
+                    **self._extra_model_kwargs(role)
                 }
         
         return config_dict
@@ -383,7 +419,8 @@ class GaiaBenchmarkEvaluator:
 
 
 def create_gaia_evaluator(llm_data: np.ndarray, llm_names: List[str], 
-                         feature_names: List[str], n_agents: int) -> GaiaBenchmarkEvaluator:
+                         feature_names: List[str], n_agents: int,
+                         supports_image: Optional[np.ndarray] = None) -> GaiaBenchmarkEvaluator:
     """
     Factory function to create a GAIA benchmark evaluator.
     
@@ -396,7 +433,8 @@ def create_gaia_evaluator(llm_data: np.ndarray, llm_names: List[str],
         llm_names=llm_names,
         feature_names=feature_names,
         n_agents=n_agents,
-        config_path=config_path
+        config_path=config_path,
+        supports_image=supports_image
     )
 
 

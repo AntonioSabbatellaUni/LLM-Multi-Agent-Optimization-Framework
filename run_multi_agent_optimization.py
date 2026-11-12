@@ -84,12 +84,20 @@ def create_evaluator_for_architecture(architecture_name: str, arch_config: dict,
                                                            feature_columns=feature_llm_columns)
 
         # Get n_agents from architecture config
-        n_agents = arch_config['architecture']['n_agents']
-        print(f"   GAIA architecture requires {n_agents} agents")
+        from multi_agent_architectures.gaia_smolagents.evaluator import create_gaia_evaluator, effective_agent_roles
+        roles = effective_agent_roles(arch_config)
+        n_agents = len(roles)  # optimized roles (agent_roles + enabled optional roles such as visual_qa)
+        print(f"   GAIA architecture optimizes {n_agents} agents: {roles}")
+
+        # Optional per-model image capability (pool CSV column `supports_image`, from Go /models modalities.input)
+        import pandas as pd
+        supports_image = None
+        _df = pd.read_csv(config.get('data', {}).get('input_file', 'data/llm_data.csv'))
+        if 'supports_image' in _df.columns:
+            supports_image = _df['supports_image'].fillna(0).astype(int).values.astype(bool)
         
         # Create GAIA evaluator
-        from multi_agent_architectures.gaia_smolagents.evaluator import create_gaia_evaluator
-        evaluator = create_gaia_evaluator(llm_data, llm_names, feature_names, n_agents)
+        evaluator = create_gaia_evaluator(llm_data, llm_names, feature_names, n_agents, supports_image=supports_image)
         
         return evaluator
         
