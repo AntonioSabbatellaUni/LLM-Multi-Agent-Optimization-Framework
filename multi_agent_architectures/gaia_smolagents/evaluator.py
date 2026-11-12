@@ -321,7 +321,7 @@ class GaiaBenchmarkEvaluator:
         kw = dict(self.config.get('model_config', {}).get('extra_model_kwargs') or {})
         if os.getenv('MALBO_API_BASE'):
             kw.update(api_base=os.environ['MALBO_API_BASE'], api_key=os.getenv('MALBO_API_KEY', 'dummy'),
-                      max_tokens=int(os.getenv('MALBO_MAX_TOKENS', 1500)))
+                      max_tokens=int(os.getenv('MALBO_MAX_TOKENS', 32768)))
             if os.getenv('OPENCODE_API_KEY') and not os.getenv('MALBO_API_KEY'):
                 kw['api_key'] = os.environ['OPENCODE_API_KEY']
         # some free Go models 422 on list-of-parts messages; visual_qa needs real content parts so it is never flattened
