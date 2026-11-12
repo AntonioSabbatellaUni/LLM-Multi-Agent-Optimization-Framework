@@ -1,0 +1,259 @@
+{
+  "description": "GAIA 2023 validation task_ids excluded from the MALBO subset",
+  "gaia_verified_total": 27,
+  "hf_only_total": 4,
+  "n_unique": 31,
+  "tasks": [
+    {
+      "task_id": "4b6bb5f7-f634-410e-815d-e673ab7f8632",
+      "level": 1,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "correct_gold",
+      "kind": "wrong_gold",
+      "reason": "gaia-verified category 'format-conflict' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "50ad0280-0819-4bd9-b275-5de32d3b5bcb",
+      "level": 1,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "correct_gold",
+      "kind": "wrong_gold",
+      "reason": "gaia-verified category 'format-conflict' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "72e110e7-464c-453c-a309-90a95aed6538",
+      "level": 1,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "9318445f-fe6a-4e1b-acbf-c68228c9906a",
+      "level": 1,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "cca530fc-4052-43b2-b130-b30968d8aa44",
+      "level": 1,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'multiple-valid' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "e142056d-56ab-4352-b091-b56054bd1359",
+      "level": 1,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "correct_gold",
+      "kind": "wrong_gold",
+      "reason": "gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "08cae58d-4084-4616-b6dd-dd6534e4825b",
+      "level": 2,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "correct_gold",
+      "kind": "wrong_gold",
+      "reason": "gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "0a3cd321-3e76-4622-911b-0fda2e5d6b1a",
+      "level": 2,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "0b260a57-3f3a-4405-9f29-6d7a1012dbfb",
+      "level": 2,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "0bb3b44a-ede5-4db5-a520-4e844b0079c5",
+      "level": 2,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "14569e28-c88c-43e4-8c32-097d35b9a67d",
+      "level": 2,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "correct_gold",
+      "kind": "wrong_gold",
+      "reason": "gaia-verified category 'gold-wrong' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "20194330-9976-4043-8632-f8485c6c71b2",
+      "level": 2,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "2a649bb1-795f-4a01-b3be-9a01868dae73",
+      "level": 2,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'gold-wrong' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "48eb8242-1099-4c26-95d4-ef22b002457a",
+      "level": 2,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'gold-wrong' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "7a4a336d-dcfa-45a0-b014-824c7619e8de",
+      "level": 2,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "correct_gold",
+      "kind": "wrong_gold",
+      "reason": "gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "9f41b083-683e-4dcf-9185-ccfeaa88fa45",
+      "level": 2,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'gold-wrong' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "a7feb290-76bb-4cb7-8800-7edaf7954f2f",
+      "level": 2,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "ded28325-3447-4c56-860f-e497d6fb3577",
+      "level": 2,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "correct_gold",
+      "kind": "wrong_gold",
+      "reason": "gaia-verified category 'gold-wrong' (gold/defect text deliberately not copied; see errata.json upstream)",
+      "also_reported_in": "HF GAIA discussions #18/PR#34"
+    },
+    {
+      "task_id": "f0f46385-fc03-4599-b5d3-f56496c3e69f",
+      "level": 2,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "correct_gold",
+      "kind": "wrong_gold",
+      "reason": "gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream)",
+      "also_reported_in": "HF GAIA discussions #51"
+    },
+    {
+      "task_id": "00d579ea-0889-4fd9-a771-2c8d79835c8d",
+      "level": 3,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'gold-wrong' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "384d0dd8-e8a4-4cfe-963c-d37f256e7662",
+      "level": 3,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "5f982798-16b9-4051-ab57-cfc7ebdb2a91",
+      "level": 3,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "72c06643-a2fa-4186-aa5c-9ec33ae9b445",
+      "level": 3,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "8d46b8d6-b38a-47ff-ac74-cda14cf2d19b",
+      "level": 3,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "correct_gold",
+      "kind": "wrong_gold",
+      "reason": "gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "ad2b4d70-9314-4fe6-bfbe-894a45f6055f",
+      "level": 3,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "bec74516-02fc-48dc-b202-55e78d0e17cf",
+      "level": 3,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream)",
+      "also_reported_in": "HF GAIA discussions #17/#36"
+    },
+    {
+      "task_id": "ebbc1f13-d24d-40df-9068-adcf735b4240",
+      "level": 3,
+      "source": "gaia-verified (github.com/anirudhvenu/gaia-verified, errata.json, audited 2026-07)",
+      "audit_action": "remove",
+      "kind": "remove",
+      "reason": "gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream)"
+    },
+    {
+      "task_id": "6b078778-0b90-464d-83f6-59511c811b01",
+      "level": null,
+      "source": "HF discussion #15 on gaia-benchmark/GAIA (https://huggingface.co/datasets/gaia-benchmark/GAIA/discussions)",
+      "audit_action": null,
+      "kind": "hf_discussion",
+      "reason": "gold 'Alfonso Visconti' vs 'Alfonso Cardinal Visconti' (name mismatch)"
+    },
+    {
+      "task_id": "e1fc63a2-da7a-432f-be78-7c4a95598703",
+      "level": null,
+      "source": "HF discussion #17/#36 on gaia-benchmark/GAIA (https://huggingface.co/datasets/gaia-benchmark/GAIA/discussions)",
+      "audit_action": null,
+      "kind": "hf_discussion",
+      "reason": "rounding inconsistency between question and annotation (1000 h vs 100 h)"
+    },
+    {
+      "task_id": "4d51c4bf-4b0e-4f3d-897b-3f6687a7d9f2",
+      "level": null,
+      "source": "HF discussion #27 on gaia-benchmark/GAIA (https://huggingface.co/datasets/gaia-benchmark/GAIA/discussions)",
+      "audit_action": null,
+      "kind": "hf_discussion",
+      "reason": "gold (8) disputed vs proposed 4 for even-numbered west-facing houses; thread still open"
+    },
+    {
+      "task_id": "7dd30055-0198-452e-8c25-f73dbe27dcb8",
+      "level": null,
+      "source": "HF discussion #37 on gaia-benchmark/GAIA (https://huggingface.co/datasets/gaia-benchmark/GAIA/discussions)",
+      "audit_action": null,
+      "kind": "hf_discussion",
+      "reason": "rounding ambiguity of the gold (1.456 vs 1.46 Angstrom); thread closed"
+    }
+  ]
+}
