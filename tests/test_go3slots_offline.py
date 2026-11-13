@@ -58,6 +58,56 @@ assert all(img[r[3]] for r in r4) and max(c4[3].values()) - min(c4[3].values()) 
 rr, _ = design_pool_indices(16, 3, len(names), 42, 'random'); rr2, _ = design_pool_indices(16, 3, len(names), 42, 'random')
 assert rr == rr2 and len(rr) == 16
 print('first 3 design points:', [[names[i] for i in r] for r in rows[:3]])
+# --- 1b2) include_configs / warm_start_from: reused points count toward n_initial, no duplicates, X exactly as the projection's inputs
+import json, tempfile
+from botorch_optimization import plan_initial_design, load_reusable_results, BoTorchOptimizer
+slots = ev.agent_roles
+base15, _ = design_pool_indices(15, 3, len(names), 42, 'balanced', slot_names=slots)
+forced = {s_: names[i] for s_, i in zip(slots, base15[0])}          # a config the plain 15-point draw WOULD produce -> must be re-drawn around
+smoke = {'manager': 'deepseek-v4.1-flash@max', 'search_agent': 'gpt-6-luna@low', 'docs': 'glm-5.3-flash@max'}
+for inc in ([smoke], [forced], [smoke, forced, dict(smoke)]):
+    prow, pc, ni = plan_initial_design(16, 3, names, slots, 42, 'balanced', include_configs=inc)
+    assert len(prow) == 16 and len(set(prow)) == 16 and ni == len({tuple(sorted(c.items())) for c in inc})
+    assert [tuple(names[i] for i in prow[k]) for k in range(ni)] == [tuple(c[s_] for s_ in slots) for c in inc[:ni]]
+    for c in pc:
+        assert sum(c.values()) == 16 and max(c.values()) <= 2
+prow, pc, ni = plan_initial_design(16, 3, names, slots, 42, 'balanced', include_configs=[smoke])
+assert plan_initial_design(16, 3, names, slots, 42, 'balanced', include_configs=[smoke]) == (prow, pc, ni)   # deterministic
+for bad in ([{'manager': 'nope', 'search_agent': 'gpt-6-luna@low', 'docs': 'glm-5.3-flash@max'}], [{'manager': 'glm-5.3@low'}]):
+    try:
+        plan_initial_design(16, 3, names, slots, 42, 'balanced', include_configs=bad); raise SystemExit('expected ValueError')
+    except ValueError:
+        pass
+tmp = tempfile.mkdtemp()
+old = os.path.join(tmp, 'old'); os.makedirs(old)
+with open(os.path.join(old, 'evaluations.jsonl'), 'w') as f:
+    f.write(json.dumps({'eval_index': 0, 'options': smoke, 'accuracy': 40.0, 'cost_objective': 1.25, 'cost_report': {'aa_cost': 1.25, 'go_list_cost': 0.6}}) + '\n')
+    f.write(json.dumps({'eval_index': 1, 'options': forced, 'accuracy': 0.0, 'cost_objective': 100.0}) + '\n')   # crashed benchmark: not reusable
+    f.write(json.dumps({'eval_index': 2, 'options': {'manager': 'x'}}) + '\n')                                     # malformed: skipped
+assert list(load_reusable_results(old)) == [tuple(sorted(smoke.items()))]
+new_out = os.path.join(tmp, 'new')
+ev2 = create_gaia_evaluator(data, names, fn, 3, config_path=acp, pool_df=pool, pool_df_full=full, output_dir=new_out)
+called = []
+def fake_eval(X):
+    called.append(len(X)); return np.tile([0.1, -0.5], (len(X), 1))
+ev2.evaluate_agent_system = fake_eval
+opt = BoTorchOptimizer(ev2, output_dir=new_out, seed=42, initial_design='balanced', include_configs=[smoke, forced], warm_start_from=old)
+Xt, Yt = opt._generate_initial_data(16)
+assert called == [15] and Xt.shape == (16, 15) and Yt.shape == (16, 2)       # smoke reused, forced (crashed record) re-evaluated + 14 drawn
+sc = ev2.config['botorch_integration']['performance_normalization']['scale_factor']
+assert abs(float(Yt[0, 0]) - 40.0 * sc) < 1e-12 and abs(float(Yt[0, 1]) + 1.25) < 1e-12 and abs(float(Yt[1, 0]) - 0.1) < 1e-12
+x0 = np.concatenate([data[names.index(smoke[s_])] for s_ in slots])
+assert np.allclose(Xt[0].numpy(), x0)                                           # pool-row normalized features, as the projection expects
+assert [ev2._project_to_llm_configuration(Xt[k].numpy(), 5)[r]['pool']['name'] for k in (0,) for r in ('manager', 'search_agent', 'text_inspector')] == [smoke['manager'], smoke['search_agent'], smoke['docs']]
+dj = json.load(open(os.path.join(new_out, 'initial_design.json')))
+assert dj['points'][0]['source'].startswith('reused:') and dj['points'][1]['source'] == 'included_evaluated' and dj['points'][2]['source'] == 'drawn'
+recs = [json.loads(l) for l in open(os.path.join(new_out, 'evaluations.jsonl'))]
+assert len(recs) == 1 and recs[0]['reused'] is True and recs[0]['options'] == smoke and recs[0]['accuracy'] == 40.0
+ev3 = create_gaia_evaluator(data, names, fn, 3, config_path=acp, pool_df=pool, pool_df_full=full, output_dir=os.path.join(tmp, 'new2'))
+ev3.evaluate_agent_system = fake_eval
+Xw, Yw = BoTorchOptimizer(ev3, output_dir=os.path.join(tmp, 'new2'), warm_start_from=os.path.join(old, 'evaluations.jsonl'))._generate_initial_data(16)
+assert called[-1] == 15 and abs(float(Yw[0, 1]) + 1.25) < 1e-12      # warm_start_from alone: the one valid record is included
+print('include_configs / warm_start_from OK')
 # --- 1c) logger thread safety + backoff
 import threading, json, tempfile
 from utils import llm_logger, retry

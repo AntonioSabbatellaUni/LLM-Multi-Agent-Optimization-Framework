@@ -62,6 +62,91 @@ def design_pool_indices(n_points, n_slots, n_llms, seed=42, mode="balanced", slo
     return rows, counts
 
 
+def load_reusable_results(sources):
+    """Read finished evaluations from evaluations.jsonl file(s) / output dir(s) -> {tuple(sorted options.items()): record}.
+    Later records win. Records without `options`/`accuracy`, or with the 'benchmark crashed' penalty cost (>=100), are skipped."""
+    if isinstance(sources, (str, os.PathLike)):
+        sources = [sources]
+    found = {}
+    for src in sources or []:
+        pth = os.path.join(str(src), "evaluations.jsonl") if os.path.isdir(str(src)) else str(src)
+        if not os.path.exists(pth):
+            raise FileNotFoundError(f"warm_start_from: {pth} not found")
+        for line in open(pth):
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            if rec.get("reused"):
+                continue  # take the original record, not a copy
+            if not rec.get("options") or rec.get("accuracy") is None or (rec.get("cost_objective") or 0) >= 100:
+                continue
+            rec["_source"] = pth
+            found[tuple(sorted(rec["options"].items()))] = rec
+    return found
+
+
+def plan_initial_design(n_points, n_slots, llm_names, slot_names, seed=42, mode="balanced", supports_image=None,
+                        include_configs=None):
+    """Initial design with pre-selected points. -> (rows, counts, n_included): rows = n_points tuples of pool indices, the first
+    n_included are the include_configs (in order, deduplicated), the rest a design_pool_indices draw of n_points - n_included that never
+    duplicates an included/other row (duplicates are fixed by swapping one slot's value with another row of the same column, which
+    keeps the per-slot balance of the draw). counts are per-slot over ALL rows."""
+    idx = {n: i for i, n in enumerate(llm_names)}
+    inc, seen = [], set()
+    for cfg in include_configs or []:
+        missing = [s for s in slot_names if s not in cfg]
+        extra = [s for s in cfg if s not in slot_names]
+        if missing or extra:
+            raise ValueError(f"include_configs entry {cfg} must have exactly the slots {list(slot_names)}")
+        bad = [v for v in cfg.values() if v not in idx]
+        if bad:
+            raise ValueError(f"include_configs: unknown pool option(s) {bad} (pool: {list(llm_names)})")
+        row = tuple(idx[cfg[s]] for s in slot_names)
+        if row not in seen:
+            seen.add(row)
+            inc.append(row)
+    if len(inc) > n_points:
+        raise ValueError(f"{len(inc)} included configs exceed n_initial={n_points}")
+    n_draw = n_points - len(inc)
+    drawn = []
+    if n_draw:
+        drawn, _ = design_pool_indices(n_draw, n_slots, len(llm_names), seed, mode, slot_names=slot_names, supports_image=supports_image)
+        drawn = [list(r) for r in drawn]
+        taken = set(inc)
+
+        def clash(k):
+            r = tuple(drawn[k])
+            return r in taken or any(tuple(drawn[j]) == r for j in range(k))
+
+        for k in range(n_draw):
+            if not clash(k):
+                continue
+            fixed = False
+            for s in range(n_slots):
+                for j in range(n_draw):
+                    if j == k or drawn[j][s] == drawn[k][s]:
+                        continue
+                    drawn[k][s], drawn[j][s] = drawn[j][s], drawn[k][s]
+                    ok = not clash(k) and not clash(j) and all(not (tuple(drawn[m]) == tuple(drawn[j]) and m != j) for m in range(n_draw))
+                    if ok:
+                        fixed = True
+                        break
+                    drawn[k][s], drawn[j][s] = drawn[j][s], drawn[k][s]
+                if fixed:
+                    break
+            if not fixed:
+                print(f"  warning: could not remove duplicate design row {k} (kept)")
+    rows = inc + [tuple(r) for r in drawn]
+    counts = []
+    for s in range(n_slots):
+        c = {}
+        for r in rows:
+            c[r[s]] = c.get(r[s], 0) + 1
+        counts.append(c)
+    return rows, counts, len(inc)
+
+
 class BoTorchOptimizer:
     """
     BoTorch-based multi-objective optimizer using Gaussian Process models
@@ -69,7 +154,8 @@ class BoTorchOptimizer:
     """
     
     def __init__(self, evaluator: NumpyLLMEvaluator, bounds: torch.Tensor = None, ref_point: torch.Tensor = None, output_dir: str = None,
-                 seed: int = 42, initial_design: str = "balanced"):
+                 seed: int = 42, initial_design: str = "balanced",
+                 include_configs=None, warm_start_from=None):
         """
         Initialize the BoTorch optimizer.
         
@@ -85,6 +171,8 @@ class BoTorchOptimizer:
             raise ValueError(f"initial_design must be 'balanced' or 'random', got {initial_design!r}")
         self.seed = int(seed)
         self.initial_design = initial_design
+        self.include_configs = list(include_configs or [])      # [{slot: option name}], count toward n_initial
+        self.warm_start_from = warm_start_from                  # evaluations.jsonl / output dir (or list): results of included configs are reused
         self.evaluator = evaluator
         self.dimension = evaluator.n_agents * len(evaluator.feature_names)
         self.output_dir = output_dir
@@ -153,12 +241,12 @@ class BoTorchOptimizer:
         model = model.to(device=self.device, dtype=self.dtype)
         return model
     
-    def _save_initial_design(self, rows, counts):
+    def _save_initial_design(self, rows, counts, sources=None):
         """Write <output_dir>/initial_design.json (option names per slot, before any evaluation) and print per-slot counts."""
         names = list(self.evaluator.llm_names)
         slots = list(getattr(self.evaluator, 'agent_roles', None) or [f"agent{i}" for i in range(self.evaluator.n_agents)])
-        design = [{"index": k, "pool_idx": [int(x) for x in r], "options": {sl: names[int(x)] for sl, x in zip(slots, r)}}
-                  for k, r in enumerate(rows)]
+        design = [{"index": k, "pool_idx": [int(x) for x in r], "options": {sl: names[int(x)] for sl, x in zip(slots, r)},
+                   **({"source": sources[k]} if sources else {})} for k, r in enumerate(rows)]
         for sl, c in zip(slots, counts):
             print(f"  design counts [{sl}]: " + ", ".join(f"{names[i]}={n}" for i, n in sorted(c.items(), key=lambda t: names[t[0]])))
         if self.output_dir:
@@ -185,21 +273,42 @@ class BoTorchOptimizer:
         n_llms, n_features = llm_data.shape
         n_agents = self.evaluator.n_agents
         
-        rows, picks = design_pool_indices(n_points, n_agents, n_llms, self.seed, self.initial_design,
-                                          slot_names=getattr(self.evaluator, 'agent_roles', None),
-                                          supports_image=getattr(self.evaluator, 'supports_image', None))
+        slot_names = list(getattr(self.evaluator, 'agent_roles', None) or [f"agent{i}" for i in range(n_agents)])
+        reusable = load_reusable_results(self.warm_start_from) if self.warm_start_from else {}
+        include = self.include_configs or [dict(k) for k in reusable]    # warm_start_from alone: reuse every valid earlier evaluation
+        rows, picks, n_inc = plan_initial_design(n_points, n_agents, self.evaluator.llm_names, slot_names, self.seed, self.initial_design,
+                                                 supports_image=getattr(self.evaluator, 'supports_image', None),
+                                                 include_configs=include)
         X_init = []
-        for pick in rows:
+        for pick in rows:   # exactly the projection's inputs: pool-row normalized features, one block per slot
             config = np.zeros(self.dimension)
             for agent_idx, llm_idx in enumerate(pick):
                 start_idx = agent_idx * n_features
                 config[start_idx:start_idx + n_features] = llm_data[llm_idx, :]
             X_init.append(config)
         X_init = np.array(X_init)
-        self._save_initial_design(rows, picks)
-        
-        # Evaluate initial points
-        Y_init = self.evaluator.evaluate_agent_system(X_init)
+
+        # included points: reuse the earlier result if available, else evaluate them like the drawn ones
+        names = list(self.evaluator.llm_names)
+        Y_init = np.full((n_points, 2), np.nan)
+        sources = []
+        for k, r in enumerate(rows):
+            if k < n_inc:
+                key = tuple(sorted({sl: names[int(x)] for sl, x in zip(slot_names, r)}.items()))
+                rec = reusable.get(key)
+                if rec is not None:
+                    Y_init[k] = self.evaluator.reuse_evaluation(rec)
+                    sources.append(f"reused:{rec['_source']}")
+                    continue
+                print(f"  included config {dict(key)} has no earlier result -> will be evaluated")
+                sources.append("included_evaluated")
+            else:
+                sources.append("drawn")
+        self._save_initial_design(rows, picks, sources)
+        todo = [k for k in range(n_points) if np.isnan(Y_init[k, 0])]
+        print(f"  initial design: {n_points - len(todo)} reused, {len(todo)} to evaluate")
+        if todo:
+            Y_init[todo] = self.evaluator.evaluate_agent_system(X_init[todo])
         
         # Convert to torch tensors
         X_init_torch = torch.tensor(X_init, dtype=self.dtype, device=self.device)

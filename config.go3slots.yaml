@@ -33,6 +33,12 @@ optimization:
   # n_initial omitted -> d+1 (3 slots x 5 features + 1 = 16). Set an integer to override.
   n_iterations: 0          # initial design only for now
   seed: 42                 # numpy/torch/initial-design seed (reproducible)
+  # Reuse earlier evaluations as initial points (count toward n_initial; the balanced draw fills the rest without duplicating them).
+  # warm_start_from: path (or list) to an output dir / evaluations.jsonl whose results are reused; include_configs: which configs
+  # ({slot: option name}); if only warm_start_from is given, every valid evaluation in it is reused. An included config with no earlier result is evaluated.
+  # include_configs:
+  #   - {manager: deepseek-v4.1-flash@max, search_agent: gpt-6-luna@low, docs: glm-5.3-flash@max}
+  # warm_start_from: outputs/go3_check30_p20
   initial_design: balanced # balanced = per-slot seeded permutation of the pool, cycled (every option as evenly as possible); random = old iid draws
 output:
   checkpoint_frequency: 1

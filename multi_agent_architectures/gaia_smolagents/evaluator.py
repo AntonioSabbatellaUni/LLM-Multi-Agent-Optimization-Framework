@@ -497,6 +497,27 @@ class GaiaBenchmarkEvaluator:
         except Exception as e:
             print(f"   ⚠️ could not write evaluations.jsonl: {e}")
 
+    def reuse_evaluation(self, rec: Dict) -> np.ndarray:
+        """Y row [performance, cost] of an earlier evaluation record (from evaluations.jsonl), computed exactly as in
+        evaluate_agent_system; the record is copied into this run's evaluations.jsonl (reused=True, no eval_counter increment)."""
+        bi = self.config['botorch_integration']
+        perf = float(rec['accuracy']) * bi['performance_normalization']['scale_factor']
+        cost = float(rec['cost_objective'])
+        cost = -cost if bi['cost_normalization']['method'] == 'negative' else cost
+        if cost == 0:
+            cost = -10.0
+        out = {k: v for k, v in rec.items() if k != '_source'}
+        out.update(reused=True, reused_from=rec.get('_source'), reused_at=datetime.now().astimezone().isoformat())
+        d = Path(self.output_dir or os.getenv('MALBO_EVAL_LOG_DIR') or '.')
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            with open(d / 'evaluations.jsonl', 'a') as f:
+                f.write(json.dumps(out, default=str) + '\n')
+        except Exception as e:
+            print(f"   ⚠️ could not write evaluations.jsonl: {e}")
+        print(f"   ♻️ reused {rec['options']}: acc={rec['accuracy']:.1f}% aa_cost=${float(rec['cost_objective']):.4f} (from {rec.get('_source')})")
+        return np.array([perf, cost], dtype=np.float64)
+
     def _fallback_evaluation(self, X_flat: np.ndarray) -> np.ndarray:
         """
         Fallback evaluation when executor is not available.

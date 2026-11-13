@@ -218,7 +218,8 @@ def demonstrate_multi_agent_optimization(config_path: str = "config.yaml", resum
     # Initialize optimizer
     opt_cfg = config.get('optimization', {})
     optimizer = BoTorchOptimizer(evaluator, bounds=bounds, ref_point=ref_point, output_dir=output_dir,
-                                 seed=int(opt_cfg.get('seed', 42)), initial_design=str(opt_cfg.get('initial_design', 'balanced')))
+                                 seed=int(opt_cfg.get('seed', 42)), initial_design=str(opt_cfg.get('initial_design', 'balanced')),
+                                 include_configs=opt_cfg.get('include_configs'), warm_start_from=opt_cfg.get('warm_start_from'))
     
     # n_initial: explicit value in the config wins; else d+1 with d = n_slots x n_features
     n_initial = config['optimization'].get('n_initial')
