@@ -12,6 +12,9 @@ full, pool = load_pool_df(csv, None, False), load_pool_df(csv, feats, True)
 data, names, fn = load_llm_data(csv, feats, df=pool)
 out = os.getenv('SMOKE_OUT', 'outputs/smoke_go3slots')
 ev = create_gaia_evaluator(data, names, fn, 3, config_path=acp, pool_df=pool, pool_df_full=full, output_dir=out)
+from run_progress import update as _progress
+from datetime import datetime
+_progress(out, run_name=os.path.basename(out), n_initial=1, n_iterations=0, started_at=datetime.now().astimezone().isoformat(), phase='initial_design')
 pick = os.getenv('SMOKE_PICK', 'deepseek-v4.1-flash@max,gpt-6-luna@low,glm-5.3-flash@max').split(',')
 X = np.concatenate([data[names.index(n)] for n in pick])[None, :]
 print('Y =', ev.evaluate_agent_system(X))

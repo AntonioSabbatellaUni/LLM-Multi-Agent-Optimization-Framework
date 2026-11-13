@@ -12,6 +12,8 @@ import pandas as pd
 import json
 import yaml
 import contextlib
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
@@ -121,6 +123,10 @@ class GaiaBenchmarkEvaluator:
         self.pool_df_full = pool_df_full  # unfiltered pool (prices of fixed roles such as visual_qa)
         self.output_dir = output_dir
         self.last_cost_report = None
+        self.eval_counter = 0          # global index of the evaluation in progress (0-based)
+        self.last_wall_time = None
+        if output_dir:  # lets the executor publish <output_dir>/current_session.json for tools/malbo_status.py
+            os.environ['MALBO_OUTPUT_DIR'] = str(Path(output_dir).resolve())
         if 'visual_qa' in self.agent_roles and (self.supports_image is None or not self.supports_image.any()):
             raise ValueError("visual_qa is optimized but the pool has no `supports_image` column / no image-capable model")
         
@@ -225,7 +231,15 @@ class GaiaBenchmarkEvaluator:
                 print(f"   Complete config: {config_summary}")
 
                 # Step 2: Execute real benchmark
-                accuracy, cost = self._execute_real_benchmark(config_dict, i)
+                from run_progress import update as _progress
+                option_per_slot = {sl: config_dict[self.slots[sl][0]].get('pool', {}).get('name') or config_dict[self.slots[sl][0]]['model_id']
+                                   for sl in self.agent_roles}
+                _t0 = time.time()
+                _progress(self.output_dir, eval_index=self.eval_counter, eval_started_at=datetime.now().astimezone().isoformat(),
+                          config=option_per_slot, config_index=i, current_session_dir=None)
+                accuracy, cost = self._execute_real_benchmark(config_dict, self.eval_counter)
+                self.last_wall_time = time.time() - _t0
+                self._last_option_per_slot = option_per_slot
                 
                 # Step 3: Normalize results for BoTorch
                 normalized_performance = accuracy * self.config['botorch_integration']['performance_normalization']['scale_factor']
@@ -240,11 +254,14 @@ class GaiaBenchmarkEvaluator:
                 
                 print(f"   ✅ Raw: {accuracy:.1f}% accuracy, ${cost:.4f} cost")
                 self._log_evaluation(i, config_dict, accuracy, cost)
+                self.eval_counter += 1
+                _progress(self.output_dir, evals_done=self.eval_counter)
                 print(f"   📊 Normalized: {normalized_performance:.3f} performance, {normalized_cost:.3f} cost")
                 
             except Exception as e:
                 print(f"   ❌ Evaluation failed: {e}")
                 print(f"   🔄 Using fallback values")
+                self.eval_counter += 1
                 
                 # Apply fallback values from config
                 fallback_acc = self.config['evaluation']['fallback_accuracy']
@@ -427,6 +444,8 @@ class GaiaBenchmarkEvaluator:
                 if os.getenv('MALBO_TASK1'):
                     dataset_limits['task_1'] = int(os.environ['MALBO_TASK1'])
                 run_name = f"{self.config['evaluation']['run_name_prefix']}_{i}"
+                par = os.getenv('MALBO_PARALLEL_TASKS') or self.config['evaluation'].get('parallel_tasks') or 1
+                par = max(1, int(par))
                 save_detailed = self.config['evaluation']['save_detailed_results']
 
                 print(f"Start Evaluation: Dataset limits {dataset_limits}, Run name {run_name}, Save detailed: {save_detailed}")
@@ -435,7 +454,8 @@ class GaiaBenchmarkEvaluator:
                     agent_model_configs=config_dict,
                     dataset_limits=dataset_limits,
                     run_name=run_name,
-                    save_detailed_results=save_detailed
+                    save_detailed_results=save_detailed,
+                    concurrency=par
                 )
             
             self.last_cost_report = None
@@ -458,7 +478,9 @@ class GaiaBenchmarkEvaluator:
         """Append one record per evaluation (config, accuracy, aa_cost / go_expected / go_list_cost / go_allowance, mismatch)
         to <output_dir>/evaluations.jsonl (output_dir set by the runner; else $MALBO_EVAL_LOG_DIR or cwd)."""
         rep = self.last_cost_report or {}
-        rec = {'config_index': i, 'accuracy': accuracy, 'cost_objective': cost,
+        rec = {'config_index': i, 'eval_index': self.eval_counter, 'wall_time_s': self.last_wall_time,
+               'ts_end': datetime.now().astimezone().isoformat(),
+               'options': getattr(self, '_last_option_per_slot', None), 'accuracy': accuracy, 'cost_objective': cost,
                'cost_source': 'pool_aa_prices' if rep else 'fallback_cost_estimator',
                'config': {r: {'model_id': c['model_id'], 'pool_option': c.get('pool', {}).get('name'),
                               'reasoning_effort': c.get('reasoning_effort')} for r, c in config_dict.items()},

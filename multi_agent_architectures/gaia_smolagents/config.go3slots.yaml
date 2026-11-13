@@ -38,6 +38,8 @@ evaluation:
     task_3: 0    # Number of level 3 GAIA tasks to evaluate - DISABLED FOR TESTING
   
   # Execution parameters
+  # Questions answered at the same time inside one evaluation (env MALBO_PARALLEL_TASKS wins; default 1)
+  parallel_tasks: 6
   timeout_per_task: 3000      # Maximum seconds per task
   save_detailed_results: true  # Whether to save execution traces
   run_name_prefix: "go3slots_eval"  # Prefix for evaluation run names

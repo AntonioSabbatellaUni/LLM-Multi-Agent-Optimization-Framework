@@ -27,13 +27,49 @@ from logging_utils import (
     log_gpu_info, log_iteration_timing, log_optimization_complete
 )
 
+
+def design_pool_indices(n_points, n_slots, n_llms, seed=42, mode="balanced", slot_names=None, supports_image=None):
+    """Pool row index per slot for each initial point -> (rows: list of n_points tuples of n_slots ints, counts: per-slot {idx: n}).
+    balanced: per slot, seeded permutations of the allowed pool rows, concatenated (cycled) until n_points; each slot has its own
+    permutation stream, so every option appears floor(n/m) or ceil(n/m) times per slot. random: iid uniform draws (np.random, seeded).
+    The visual_qa slot (if optimised) only draws from supports_image rows."""
+    slot_names = list(slot_names or [f"agent{i}" for i in range(n_slots)])
+    allowed = []
+    for sl in slot_names:
+        if sl == "visual_qa" and supports_image is not None:
+            allowed.append(np.flatnonzero(np.asarray(supports_image, dtype=bool)))
+        else:
+            allowed.append(np.arange(n_llms))
+    cols = []
+    if mode == "balanced":
+        rng = np.random.default_rng(seed)
+        for a in allowed:
+            seq = []
+            while len(seq) < n_points:
+                seq.extend(int(x) for x in rng.permutation(a))
+            cols.append(seq[:n_points])
+    else:
+        np.random.seed(seed)
+        for a in allowed:
+            cols.append([int(a[np.random.randint(0, len(a))]) for _ in range(n_points)])
+    rows = [tuple(cols[s][k] for s in range(n_slots)) for k in range(n_points)]
+    counts = []
+    for s in range(n_slots):
+        c = {}
+        for x in cols[s]:
+            c[x] = c.get(x, 0) + 1
+        counts.append(c)
+    return rows, counts
+
+
 class BoTorchOptimizer:
     """
     BoTorch-based multi-objective optimizer using Gaussian Process models
     and qLogExpectedHypervolumeImprovement acquisition function.
     """
     
-    def __init__(self, evaluator: NumpyLLMEvaluator, bounds: torch.Tensor = None, ref_point: torch.Tensor = None, output_dir: str = None):
+    def __init__(self, evaluator: NumpyLLMEvaluator, bounds: torch.Tensor = None, ref_point: torch.Tensor = None, output_dir: str = None,
+                 seed: int = 42, initial_design: str = "balanced"):
         """
         Initialize the BoTorch optimizer.
         
@@ -42,7 +78,13 @@ class BoTorchOptimizer:
             bounds: Search space bounds (shape: 2 x dimension)
             ref_point: Reference point for hypervolume calculation
             output_dir: Directory to save checkpoints (optional)
+            seed: seeds numpy/torch (initial design + BO phase)
+            initial_design: 'balanced' (per-slot seeded permutation of the pool, cycled) or 'random' (iid draws)
         """
+        if initial_design not in ("balanced", "random"):
+            raise ValueError(f"initial_design must be 'balanced' or 'random', got {initial_design!r}")
+        self.seed = int(seed)
+        self.initial_design = initial_design
         self.evaluator = evaluator
         self.dimension = evaluator.n_agents * len(evaluator.feature_names)
         self.output_dir = output_dir
@@ -111,6 +153,21 @@ class BoTorchOptimizer:
         model = model.to(device=self.device, dtype=self.dtype)
         return model
     
+    def _save_initial_design(self, rows, counts):
+        """Write <output_dir>/initial_design.json (option names per slot, before any evaluation) and print per-slot counts."""
+        names = list(self.evaluator.llm_names)
+        slots = list(getattr(self.evaluator, 'agent_roles', None) or [f"agent{i}" for i in range(self.evaluator.n_agents)])
+        design = [{"index": k, "pool_idx": [int(x) for x in r], "options": {sl: names[int(x)] for sl, x in zip(slots, r)}}
+                  for k, r in enumerate(rows)]
+        for sl, c in zip(slots, counts):
+            print(f"  design counts [{sl}]: " + ", ".join(f"{names[i]}={n}" for i, n in sorted(c.items(), key=lambda t: names[t[0]])))
+        if self.output_dir:
+            os.makedirs(self.output_dir, exist_ok=True)
+            with open(os.path.join(self.output_dir, "initial_design.json"), "w") as f:
+                json.dump({"seed": self.seed, "initial_design": self.initial_design, "slots": slots, "points": design,
+                           "counts": {sl: {names[i]: n for i, n in c.items()} for sl, c in zip(slots, counts)}}, f, indent=1)
+        self.initial_design_rows = design
+
     def _generate_initial_data(self, n_points: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Generate initial training data by sampling real LLM configurations.
@@ -121,31 +178,25 @@ class BoTorchOptimizer:
         Returns:
             Initial X and Y tensors
         """
-        print(f"Generating {n_points} initial points...")
+        print(f"Generating {n_points} initial points (design={self.initial_design}, seed={self.seed})...")
         
         # Get available LLM data
         llm_data = self.evaluator.llm_data  # Shape: (n_llms, n_features)
         n_llms, n_features = llm_data.shape
         n_agents = self.evaluator.n_agents
         
+        rows, picks = design_pool_indices(n_points, n_agents, n_llms, self.seed, self.initial_design,
+                                          slot_names=getattr(self.evaluator, 'agent_roles', None),
+                                          supports_image=getattr(self.evaluator, 'supports_image', None))
         X_init = []
-        
-        for _ in range(n_points):
-            # Sample a configuration by randomly selecting LLMs for each agent
+        for pick in rows:
             config = np.zeros(self.dimension)
-            
-            for agent_idx in range(n_agents):
-                # Randomly select an LLM for this agent
-                llm_idx = np.random.randint(0, n_llms)
-                
-                # Copy LLM features to agent position in configuration
+            for agent_idx, llm_idx in enumerate(pick):
                 start_idx = agent_idx * n_features
-                end_idx = start_idx + n_features
-                config[start_idx:end_idx] = llm_data[llm_idx, :]
-            
+                config[start_idx:start_idx + n_features] = llm_data[llm_idx, :]
             X_init.append(config)
-        
         X_init = np.array(X_init)
+        self._save_initial_design(rows, picks)
         
         # Evaluate initial points
         Y_init = self.evaluator.evaluate_agent_system(X_init)
@@ -173,6 +224,14 @@ class BoTorchOptimizer:
         Returns:
             Dictionary with optimization results
         """
+        # Reproducibility: seed numpy/torch for the initial design and the BO phase
+        np.random.seed(self.seed)
+        torch.manual_seed(self.seed)
+        from run_progress import update as _progress
+        _progress(output_dir, phase="initial_design" if not resume_from else "bo", n_initial=n_initial, n_iterations=n_iterations,
+                  batch_size=q, seed=self.seed, initial_design=self.initial_design,
+                  run_name=os.path.basename(str(output_dir).rstrip('/')) if output_dir else None,
+                  started_at=datetime.now().astimezone().isoformat(), done=False)
         # --- Dynamic sys.path management for GAIA repository integration ---
         import sys
         from pathlib import Path
@@ -223,6 +282,7 @@ class BoTorchOptimizer:
             
             # Step 1: Generate initial data
             train_x, train_y = self._generate_initial_data(n_initial)
+            _progress(output_dir, phase="bo" if n_iterations else "done", initial_design_done=True)
             all_x = [train_x]
             all_y = [train_y]
             iteration_times = []
@@ -235,6 +295,7 @@ class BoTorchOptimizer:
         for iteration in iter_range:
             iter_start_time = time.time()
             self.logger.info(f"\n🔄 Iteration {iteration}/{n_iterations}")
+            _progress(output_dir, phase="bo", bo_iteration=iteration)
             
             # Fit GP model
             gp_start_time = time.time()
@@ -368,6 +429,7 @@ class BoTorchOptimizer:
             'n_iterations': n_iterations,
             'method': 'BoTorch'
         }
+        _progress(output_dir, phase="done", done=True)
         
         return results
     
