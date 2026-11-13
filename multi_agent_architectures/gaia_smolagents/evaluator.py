@@ -359,7 +359,7 @@ class GaiaBenchmarkEvaluator:
         f = lambda k, d=0.0: d if k not in r or pd.isna(r[k]) else float(r[k])
         return {'name': str(r['Modello']), 'aa_in': f('Costo_Input_1M'), 'aa_cache': f('AA_CacheHit_1M'),
                 'aa_out': f('Costo_Output_1M'), 'go_in': f('Go_Input_1M'), 'go_cache': f('Go_CacheRead_1M'),
-                'go_out': f('Go_Output_1M'), 'go_peak': f('Go_peak_multiplier', 1.0)}
+                'go_out': f('Go_Output_1M'), 'go_cache_write': f('Go_CacheWrite_1M'), 'go_peak': f('Go_peak_multiplier', 1.0)}
 
     @staticmethod
     def _redact(cfg: Dict) -> Dict:
@@ -457,6 +457,7 @@ class GaiaBenchmarkEvaluator:
                     save_detailed_results=save_detailed,
                     concurrency=par
                 )
+                session_dir = Path(session_dir).resolve()   # relative to the executor dir: resolve before the cwd is restored
             
             self.last_cost_report = None
             rep_path = Path(session_dir) / "cost_report.json"
