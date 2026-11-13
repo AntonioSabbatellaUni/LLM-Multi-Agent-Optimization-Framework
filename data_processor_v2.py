@@ -7,7 +7,30 @@ import pandas as pd
 import numpy as np
 from typing import Tuple, List, Dict
 
-def load_llm_data(csv_path: str, feature_columns: List[str] = None) -> Tuple[np.ndarray, List[str], List[str]]:
+def add_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Derived feature columns, computed when absent: log_AA_CostPerTask, AA_Blended_1M = (3*in + out)/4."""
+    df = df.copy()
+    if 'log_AA_CostPerTask' not in df.columns and 'AA_CostPerTask_USD' in df.columns:
+        df['log_AA_CostPerTask'] = np.log(df['AA_CostPerTask_USD'].astype(float))
+    if 'AA_Blended_1M' not in df.columns and {'Costo_Input_1M', 'Costo_Output_1M'} <= set(df.columns):
+        df['AA_Blended_1M'] = (3 * df['Costo_Input_1M'] + df['Costo_Output_1M']) / 4
+    return df
+
+
+def load_pool_df(csv_path: str, feature_columns: List[str] = None, drop_missing: bool = True) -> pd.DataFrame:
+    """Pool CSV as DataFrame (derived columns added). Rows with a missing value in any feature column are
+    EXCLUDED (and logged) when drop_missing, instead of being imputed."""
+    df = add_derived_columns(pd.read_csv(csv_path))
+    if drop_missing and feature_columns:
+        bad = df[feature_columns].isna().any(axis=1)
+        for _, r in df[bad].iterrows():
+            miss = [c for c in feature_columns if pd.isna(r[c])]
+            print(f"⚠️ Pool: excluding {r['Modello']} (missing {miss})")
+        df = df[~bad].reset_index(drop=True)
+    return df
+
+
+def load_llm_data(csv_path: str, feature_columns: List[str] = None, df: pd.DataFrame = None) -> Tuple[np.ndarray, List[str], List[str]]:
     """
     Load and preprocess LLM data from CSV.
     
@@ -21,7 +44,8 @@ def load_llm_data(csv_path: str, feature_columns: List[str] = None) -> Tuple[np.
         - FEATURE_NAMES: List of feature column names
     """
     # Load the CSV
-    df = pd.read_csv(csv_path)
+    if df is None:
+        df = add_derived_columns(pd.read_csv(csv_path))
     print(f"Loaded {len(df)} LLMs from {csv_path}")
     
     # Handle missing values (N/A) by forward filling or using median

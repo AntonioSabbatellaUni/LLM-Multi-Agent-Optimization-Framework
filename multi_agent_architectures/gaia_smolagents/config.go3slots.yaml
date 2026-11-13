@@ -1,0 +1,85 @@
+# GAIA SmolagentsLibrary, Go pool 2026-11-13, 3 slots (manager / search_agent / docs=text_inspector+reformulator)
+
+# Architecture identification
+architecture:
+  name: "gaia_smolagents"
+  description: "Real benchmark evaluation using GAIA dataset with SmolagentsLibrary"
+  # SLOTS = optimized units (one block of features in the BO vector each). A slot drives one or more roles that
+  # share the same model: docs -> text_inspector AND reformulator. n_agents = number of slots (+1 if visual_qa enabled).
+  slots:
+    manager: [manager]
+    search_agent: [search_agent]
+    docs: [text_inspector, reformulator]
+  agent_roles: [manager, search_agent, text_inspector, reformulator]   # informational (ignored when `slots` is set)
+
+  # Optional 4th slot: visual_qa restricted to pool rows with supports_image == 1.
+  # When disabled it stays fixed to env MALBO_VISUAL_QA_MODEL_ID (default openai/deepseek-v4.1-flash), priced with that pool row.
+  optional_roles:
+    visual_qa:
+      enabled: false
+      requires_column: "supports_image"
+
+  # ALL required roles for complete system (including inactive ones)
+  required_roles:
+    - "manager"
+    - "search_agent" 
+    - "text_inspector"
+    - "visual_qa"
+    - "reformulator"
+  
+# Evaluation parameters
+evaluation:
+  # Dataset sampling limits (smaller = faster evaluation)
+  # Fixed task list (relative to this file); env MALBO_TASK_IDS_FILE overrides. dataset_limits is then ignored.
+  task_ids_file: "gaia_subset_seed42_n30.json"
+  dataset_limits:
+    task_1: 3    # Number of level 1 GAIA tasks to evaluate - MINIMAL FOR TESTING
+    task_2: 0    # Number of level 2 GAIA tasks to evaluate - MINIMAL FOR TESTING
+    task_3: 0    # Number of level 3 GAIA tasks to evaluate - DISABLED FOR TESTING
+  
+  # Execution parameters
+  timeout_per_task: 3000      # Maximum seconds per task
+  save_detailed_results: true  # Whether to save execution traces
+  run_name_prefix: "go3slots_eval"  # Prefix for evaluation run names
+  
+  # Error handling
+  fallback_accuracy: 0.0     # Accuracy assigned on execution error
+  fallback_cost: 100.0       # High cost penalty for failed executions
+
+# Model configuration template
+model_config:
+  default_model_class: "LiteLLMModel"  # Default model class for all agents
+  default_model_id: "openai/deepseek-v4.1-flash"  # Default model for missing roles
+  
+  # Per-role model class overrides (if needed)
+  role_specific_classes:
+    manager: "LiteLLMModel"
+    search_agent: "LiteLLMModel"
+    text_inspector: "LiteLLMModel"
+    visual_qa: "LiteLLMModel"
+    reformulator: "LiteLLMModel"
+
+# Repository configuration (will be set after cloning)
+repository:
+  path: "./smolagents_repo"  # Relative path to cloned executor repository
+  
+  # Import paths within the repository
+  optimization_interface_path: "examples/open_deep_research/optimization_interface.py"
+  required_modules:
+    - "optimization_interface"
+
+# BoTorch integration settings
+botorch_integration:
+  # How to handle LLM mapping from continuous space to discrete models
+  llm_mapping:
+    method: "euclidean_distance"  # Distance-based projection to nearest LLM
+    feature_weights: "uniform"    # Equal weight to all features, or "custom"
+  
+  # Normalization for returned metrics
+  performance_normalization:
+    method: "percentage"    # accuracy is already 0-100, normalize to 0-1
+    scale_factor: 0.01     # divide by 100
+  
+  cost_normalization:
+    method: "negative"     # BoTorch maximizes, so negate cost
+    log_scale: false       # whether to apply log scaling

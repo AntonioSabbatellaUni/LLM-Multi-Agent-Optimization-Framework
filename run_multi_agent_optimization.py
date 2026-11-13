@@ -37,9 +37,14 @@ def load_config(config_path: str = "config.yaml") -> dict:
         sys.exit(1)
 
 
-def load_architecture_config(architecture_name: str) -> dict:
+def architecture_config_path(architecture_name: str, config: dict) -> str:
+    """multi_agent_architectures/<arch>/config.yaml unless the main config sets evaluation.architecture_config."""
+    return config.get('evaluation', {}).get('architecture_config') or f"multi_agent_architectures/{architecture_name}/config.yaml"
+
+
+def load_architecture_config(architecture_name: str, arch_config_path: str = None) -> dict:
     """Load architecture-specific configuration."""
-    arch_config_path = f"multi_agent_architectures/{architecture_name}/config.yaml"
+    arch_config_path = arch_config_path or f"multi_agent_architectures/{architecture_name}/config.yaml"
     
     try:
         with open(arch_config_path, 'r') as f:
@@ -55,7 +60,8 @@ def load_architecture_config(architecture_name: str) -> dict:
         sys.exit(1)
 
 
-def create_evaluator_for_architecture(architecture_name: str, arch_config: dict, config: dict) -> object:
+def create_evaluator_for_architecture(architecture_name: str, arch_config: dict, config: dict,
+                                      arch_config_path: str = None, output_dir: str = None) -> object:
     """Create the appropriate evaluator based on architecture selection."""
     print(f"\n🏗️ CREATING EVALUATOR FOR ARCHITECTURE: {architecture_name}")
     print("-" * 60)
@@ -77,27 +83,31 @@ def create_evaluator_for_architecture(architecture_name: str, arch_config: dict,
     elif architecture_name == "gaia_smolagents":
         print("🎯 Using GAIA benchmark evaluation (real, slower)")
         
-        # Load LLM data for projection
-        from data_processor_v2 import load_llm_data
-        feature_llm_columns = config.get('features', []) # Use config features for each llm if available
-        llm_data, llm_names, feature_names = load_llm_data(config.get('data', {}).get('input_file', 'data/llm_data.csv'), 
-                                                           feature_columns=feature_llm_columns)
+        # Load LLM data for projection. Features come from the main config (any number); rows with a missing
+        # feature are excluded from the pool (logged), not imputed.
+        from data_processor_v2 import load_llm_data, load_pool_df
+        feature_llm_columns = config.get('features', [])
+        csv_path = config.get('data', {}).get('input_file', 'data/llm_data.csv')
+        pool_df_full = load_pool_df(csv_path, None, drop_missing=False)
+        pool_df = load_pool_df(csv_path, feature_llm_columns or None, drop_missing=True)
+        print(f"   Pool: {len(pool_df)}/{len(pool_df_full)} options usable with features {feature_llm_columns}")
+        llm_data, llm_names, feature_names = load_llm_data(csv_path, feature_columns=feature_llm_columns, df=pool_df)
 
-        # Get n_agents from architecture config
-        from multi_agent_architectures.gaia_smolagents.evaluator import create_gaia_evaluator, effective_agent_roles
-        roles = effective_agent_roles(arch_config)
-        n_agents = len(roles)  # optimized roles (agent_roles + enabled optional roles such as visual_qa)
-        print(f"   GAIA architecture optimizes {n_agents} agents: {roles}")
+        # n_agents = number of optimized SLOTS (agent_roles/slots + enabled optional roles such as visual_qa)
+        from multi_agent_architectures.gaia_smolagents.evaluator import create_gaia_evaluator, effective_slots
+        slots = effective_slots(arch_config)
+        n_agents = len(slots)
+        print(f"   GAIA architecture optimizes {n_agents} slots (slot -> roles): {slots}")
 
         # Optional per-model image capability (pool CSV column `supports_image`, from Go /models modalities.input)
-        import pandas as pd
         supports_image = None
-        _df = pd.read_csv(config.get('data', {}).get('input_file', 'data/llm_data.csv'))
-        if 'supports_image' in _df.columns:
-            supports_image = _df['supports_image'].fillna(0).astype(int).values.astype(bool)
-        
-        # Create GAIA evaluator
-        evaluator = create_gaia_evaluator(llm_data, llm_names, feature_names, n_agents, supports_image=supports_image)
+        if 'supports_image' in pool_df.columns:
+            supports_image = pool_df['supports_image'].fillna(0).astype(int).values.astype(bool)
+
+        evaluator = create_gaia_evaluator(llm_data, llm_names, feature_names, n_agents, supports_image=supports_image,
+                                          config_path=arch_config_path, pool_df=pool_df, pool_df_full=pool_df_full,
+                                          output_dir=output_dir)
+        pool_df.to_csv(os.path.join(output_dir, 'pool_used.csv'), index=False) if output_dir else None
         
         return evaluator
         
@@ -154,7 +164,8 @@ def demonstrate_multi_agent_optimization(config_path: str = "config.yaml", resum
     config = load_config(config_path)
     architecture_name = config['evaluation']['architecture']
     # load the config file in  multi_agent_architectures/{architecture_name}/config.yaml
-    arch_config = load_architecture_config(architecture_name)
+    arch_config_path = architecture_config_path(architecture_name, config)
+    arch_config = load_architecture_config(architecture_name, arch_config_path)
     
     print_banner(architecture_name, resume_from)
     
@@ -180,14 +191,13 @@ def demonstrate_multi_agent_optimization(config_path: str = "config.yaml", resum
         print(f"📋 Resume info saved: {resume_info_path}")
     
     # Copy configurations for reproducibility
-    arch_config_path = f"multi_agent_architectures/{architecture_name}/config.yaml"
     copy_configs_to_output(config_path, arch_config_path, output_dir)
     
     # Step 2: Initialize the appropriate evaluator
     print("\n📊 STEP 1: INITIALIZING EVALUATION SYSTEM")
     print("-" * 50)
     
-    evaluator = create_evaluator_for_architecture(architecture_name, arch_config, config)
+    evaluator = create_evaluator_for_architecture(architecture_name, arch_config, config, arch_config_path, output_dir)
     
     # Step 3: Set up BoTorch parameters  
     dimension = evaluator.n_agents * len(evaluator.feature_names)
@@ -208,6 +218,13 @@ def demonstrate_multi_agent_optimization(config_path: str = "config.yaml", resum
     # Initialize optimizer
     optimizer = BoTorchOptimizer(evaluator, bounds=bounds, ref_point=ref_point, output_dir=output_dir)
     
+    # n_initial: explicit value in the config wins; else d+1 with d = n_slots x n_features
+    n_initial = config['optimization'].get('n_initial')
+    if n_initial in (None, 'auto'):
+        n_initial = dimension + 1
+        print(f"  n_initial not set -> d+1 = {n_initial} (d = {evaluator.n_agents} slots x {len(evaluator.feature_names)} features)")
+    config['optimization']['n_initial'] = n_initial
+
     # Display setup information
     print(f"\nOptimization setup:")
     print(f"  • Architecture: {architecture_name}")

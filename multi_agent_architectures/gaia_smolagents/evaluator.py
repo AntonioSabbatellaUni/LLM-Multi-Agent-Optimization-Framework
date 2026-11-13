@@ -8,6 +8,8 @@ It replaces the simulated evaluation with actual multi-agent task execution.
 import os
 import sys
 import numpy as np
+import pandas as pd
+import json
 import yaml
 import contextlib
 from pathlib import Path
@@ -52,13 +54,24 @@ def isolated_executor_env(executor_root_path: Path):
         sys.path[:] = original_sys_path
 
 
+def effective_slots(config: dict) -> Dict[str, List[str]]:
+    """Optimized SLOTS (one BO block of features each) -> the roles they drive (linked roles share one model).
+    architecture.slots = {slot: [roles]}; without it every agent_roles entry is its own slot.
+    Enabled optional roles (e.g. visual_qa) are appended as extra single-role slots."""
+    arch = config['architecture']
+    if arch.get('slots'):
+        slots = {k: list(v) for k, v in arch['slots'].items()}
+    else:
+        slots = {r: [r] for r in arch['agent_roles']}
+    for name, opt in (arch.get('optional_roles') or {}).items():
+        if opt.get('enabled') and name not in slots:
+            slots[name] = [name]
+    return slots
+
+
 def effective_agent_roles(config: dict) -> List[str]:
-    """Optimized roles: architecture.agent_roles + enabled optional roles (e.g. visual_qa)."""
-    roles = list(config['architecture']['agent_roles'])
-    for name, opt in (config['architecture'].get('optional_roles') or {}).items():
-        if opt.get('enabled') and name not in roles:
-            roles.append(name)
-    return roles
+    """Names of the optimized slots (== roles when no linking is configured); len() = n_agents."""
+    return list(effective_slots(config))
 
 
 def load_architecture_roles(config_path: Optional[str] = None) -> List[str]:
@@ -77,7 +90,7 @@ class GaiaBenchmarkEvaluator:
     
     def __init__(self, llm_data: np.ndarray, llm_names: List[str], feature_names: List[str], 
                  n_agents: int, config_path: Optional[str] = None,
-                 supports_image: Optional[np.ndarray] = None):
+                 supports_image: Optional[np.ndarray] = None, pool_df=None, output_dir: Optional[str] = None, pool_df_full=None):
         """
         Initialize the GAIA benchmark evaluator.
         
@@ -100,7 +113,14 @@ class GaiaBenchmarkEvaluator:
             config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
         
         self.config = self._load_config(config_path)
-        self.agent_roles = effective_agent_roles(self.config)
+        self.config_dir = Path(config_path).resolve().parent
+        self.slots = effective_slots(self.config)          # slot -> [roles]
+        self.agent_roles = list(self.slots)                # optimized slot names, in BO block order
+        # pool DataFrame aligned with llm_names/llm_data (columns go_model_id, reasoning_effort, prices...); None = legacy pool
+        self.pool_df = pool_df
+        self.pool_df_full = pool_df_full  # unfiltered pool (prices of fixed roles such as visual_qa)
+        self.output_dir = output_dir
+        self.last_cost_report = None
         if 'visual_qa' in self.agent_roles and (self.supports_image is None or not self.supports_image.any()):
             raise ValueError("visual_qa is optimized but the pool has no `supports_image` column / no image-capable model")
         
@@ -134,14 +154,16 @@ class GaiaBenchmarkEvaluator:
         expected_agents = len(self.agent_roles)
         if self.n_agents != expected_agents:
             raise ValueError(
-                f"Architecture mismatch: {expected_agents} optimized roles {self.agent_roles} but n_agents={self.n_agents}."
+                f"Architecture mismatch: {expected_agents} optimized slots {self.agent_roles} but n_agents={self.n_agents}."
             )
-        expected_roles = len(self.agent_roles)
-        if expected_roles != expected_agents:
-            raise ValueError(
-                f"Configuration error: {expected_agents} agents specified but "
-                f"{expected_roles} roles defined in agent_roles."
-            )
+        all_roles = [r for rs in self.slots.values() for r in rs]
+        if len(set(all_roles)) != len(all_roles):
+            raise ValueError(f"A role appears in more than one slot: {self.slots}")
+        unknown = set(all_roles) - set(self.config['architecture']['required_roles'])
+        if unknown:
+            raise ValueError(f"Slot roles not in required_roles: {unknown}")
+        if self.pool_df is not None and len(self.pool_df) != len(self.llm_names):
+            raise ValueError("pool_df and llm_names are not aligned")
         
         print(f"✅ GAIA architecture validation passed: {expected_agents} agents")
     
@@ -198,7 +220,8 @@ class GaiaBenchmarkEvaluator:
                 
                 # Step 1.5: Complete configuration with default models for missing roles
                 config_dict = self._complete_agent_configuration(config_dict)
-                config_summary = ', '.join([f'{role}={cfg["model_id"].split("/")[-1]}' for role, cfg in config_dict.items()])
+                config_summary = ', '.join([f'{role}={cfg.get("pool", {}).get("name") or cfg["model_id"].split("/")[-1]}'
+                                            f'(effort={cfg.get("reasoning_effort", "env")})' for role, cfg in config_dict.items()])
                 print(f"   Complete config: {config_summary}")
 
                 # Step 2: Execute real benchmark
@@ -216,6 +239,7 @@ class GaiaBenchmarkEvaluator:
                 results[i, 1] = normalized_cost
                 
                 print(f"   ✅ Raw: {accuracy:.1f}% accuracy, ${cost:.4f} cost")
+                self._log_evaluation(i, config_dict, accuracy, cost)
                 print(f"   📊 Normalized: {normalized_performance:.3f} performance, {normalized_cost:.3f} cost")
                 
             except Exception as e:
@@ -256,11 +280,14 @@ class GaiaBenchmarkEvaluator:
             agents_config = []
             agent_roles = self.agent_roles
             
-            for agent_idx, role in enumerate(agent_roles):
+            for agent_idx, slot in enumerate(agent_roles):
+                first = self.slots[slot][0]
                 agents_config.append({
                     'agent_id': agent_idx,
-                    'role': role,
-                    'assigned_llm': config_dict[role]['model_id']
+                    'role': slot,
+                    'roles': self.slots[slot],
+                    'assigned_llm': config_dict[first]['model_id'],
+                    'pool_option': config_dict[first].get('pool', {}).get('name')
                 })
             
             configurations.append({
@@ -273,42 +300,49 @@ class GaiaBenchmarkEvaluator:
     def _project_to_llm_configuration(self, X_single: np.ndarray, n_features: int) -> Dict[str, Dict]:
         """
         Project a single continuous vector to a concrete LLM configuration.
-        
-        Args:
-            X_single: Flat vector of length (n_agents * n_features)
-            n_features: Number of features per agent
-            
-        Returns:
-            Dictionary mapping agent roles to model configurations
+        One block of n_features per SLOT; every role linked to the slot gets the same pool option.
+
+        Returns: role -> model kwargs (+ `reasoning_effort` and `pool` price metadata when the pool is a Go pool)
         """
-        # Reshape to (n_agents, n_features)
         X_agents = X_single.reshape(self.n_agents, n_features)
-        
-        # Find closest LLM for each agent using existing projection logic; visual_qa only among image-capable models
+
+        # closest LLM per slot (euclidean); the visual_qa slot only among image-capable models
         llm_indices = find_closest_llm_index(X_agents, self.llm_data)
-        for idx, role in enumerate(self.agent_roles):
-            if role == 'visual_qa' and self.supports_image is not None:
+        for idx, slot in enumerate(self.agent_roles):
+            if slot == 'visual_qa' and self.supports_image is not None:
                 cand = np.flatnonzero(self.supports_image)
                 llm_indices[idx] = cand[find_closest_llm_index(X_agents[idx:idx + 1], self.llm_data[cand])[0]]
-        
-        # Build configuration dictionary for the executor
-        agent_roles = self.agent_roles
+
         model_class = self.config['model_config']['default_model_class']
-        
         config_dict = {}
-        for agent_idx, role in enumerate(agent_roles):
-            llm_name = self.llm_names[llm_indices[agent_idx]]
-            
-            # Use role-specific model class if defined
-            role_specific_class = self.config['model_config']['role_specific_classes'].get(role, model_class)
-            
-            config_dict[role] = {
-                'model_class': role_specific_class,
-                'model_id': llm_name,
-                **self._extra_model_kwargs(role)
-            }
-        
+        for slot_idx, slot in enumerate(self.agent_roles):
+            row = int(llm_indices[slot_idx])
+            for role in self.slots[slot]:
+                role_class = self.config['model_config']['role_specific_classes'].get(role, model_class)
+                config_dict[role] = {
+                    'model_class': role_class,
+                    **self._pool_model_fields(row),
+                    **self._extra_model_kwargs(role)
+                }
         return config_dict
+
+    def _pool_model_fields(self, row: int) -> Dict:
+        """model_id (+ reasoning_effort, pool prices) for pool row `row`."""
+        name = self.llm_names[row]
+        if self.pool_df is None or 'go_model_id' not in self.pool_df.columns:
+            return {'model_id': name}
+        r = self.pool_df.iloc[row]
+        return {'model_id': f"openai/{r['go_model_id']}",
+                # value to send for this role; '' = send nothing (loader gives it precedence over env)
+                'reasoning_effort': '' if pd.isna(r.get('reasoning_effort')) else str(r['reasoning_effort']),
+                'pool': self._price_dict(r)}
+
+    @staticmethod
+    def _price_dict(r) -> Dict:
+        f = lambda k, d=0.0: d if k not in r or pd.isna(r[k]) else float(r[k])
+        return {'name': str(r['Modello']), 'aa_in': f('Costo_Input_1M'), 'aa_cache': f('AA_CacheHit_1M'),
+                'aa_out': f('Costo_Output_1M'), 'go_in': f('Go_Input_1M'), 'go_cache': f('Go_CacheRead_1M'),
+                'go_out': f('Go_Output_1M'), 'go_peak': f('Go_peak_multiplier', 1.0)}
 
     @staticmethod
     def _redact(cfg: Dict) -> Dict:
@@ -330,7 +364,8 @@ class GaiaBenchmarkEvaluator:
         return kw
 
     def _complete_agent_configuration(self, config_dict: Dict[str, Dict]) -> Dict[str, Dict]:
-        """Complete configuration with default models for missing agent roles."""
+        """Complete configuration with default models for missing roles (visual_qa fixed to MALBO_VISUAL_QA_MODEL_ID,
+        priced with the matching pool row of the full pool CSV)."""
         required_roles = self.config['architecture']['required_roles']
         default_model_class = self.config['model_config']['default_model_class']
         default_model_id = self.config['model_config']['default_model_id']
@@ -345,8 +380,26 @@ class GaiaBenchmarkEvaluator:
                     'model_id': model_id,
                     **self._extra_model_kwargs(role)
                 }
+                pool = self._fixed_role_pool(model_id)
+                if pool:
+                    config_dict[role]['pool'] = pool
         
         return config_dict
+
+    def _fixed_role_pool(self, model_id: str) -> Optional[Dict]:
+        """Prices for a role that is not optimized: first row of the pool whose go_model_id matches model_id."""
+        df = self.pool_df
+        if df is None or 'go_model_id' not in df.columns:
+            return None
+        gid = model_id.split('/')[-1]
+        full = self.pool_df_full
+        for d in (df, full):
+            if d is not None:
+                hit = d[d['go_model_id'] == gid]
+                if len(hit):
+                    return self._price_dict(hit.iloc[0])
+        print(f"   ⚠️ no pool row for fixed model {model_id}: its calls will be unpriced")
+        return None
     
     def _execute_real_benchmark(self, config_dict: Dict[str, Dict], i: int) -> Tuple[float, float]:
         """
@@ -368,6 +421,9 @@ class GaiaBenchmarkEvaluator:
 
                 # Prepare execution parameters
                 dataset_limits = dict(self.config['evaluation']['dataset_limits'])
+                tf = self.config['evaluation'].get('task_ids_file')
+                if tf and not os.getenv('MALBO_TASK_IDS_FILE'):
+                    os.environ['MALBO_TASK_IDS_FILE'] = str((self.config_dir / tf).resolve())  # fixed GAIA task list (env wins)
                 if os.getenv('MALBO_TASK1'):
                     dataset_limits['task_1'] = int(os.environ['MALBO_TASK1'])
                 run_name = f"{self.config['evaluation']['run_name_prefix']}_{i}"
@@ -375,13 +431,18 @@ class GaiaBenchmarkEvaluator:
 
                 print(f"Start Evaluation: Dataset limits {dataset_limits}, Run name {run_name}, Save detailed: {save_detailed}")
                 #
-                accuracy, cost, _ = evaluate_configuration(
+                accuracy, cost, session_dir = evaluate_configuration(
                     agent_model_configs=config_dict,
                     dataset_limits=dataset_limits,
                     run_name=run_name,
                     save_detailed_results=save_detailed
                 )
             
+            self.last_cost_report = None
+            rep_path = Path(session_dir) / "cost_report.json"
+            if rep_path.exists():
+                self.last_cost_report = json.loads(rep_path.read_text())
+                self.last_cost_report['session_dir'] = str(session_dir)
             print(f"  ✅ Results: Accuracy={accuracy:.2f}%, Cost=${cost:.4f}")
             return accuracy, cost
 
@@ -393,6 +454,26 @@ class GaiaBenchmarkEvaluator:
             # Return penalty values
             return 0.0, 100.0
     
+    def _log_evaluation(self, i: int, config_dict: Dict[str, Dict], accuracy: float, cost: float):
+        """Append one record per evaluation (config, accuracy, aa_cost / go_expected / go_list_cost / go_allowance, mismatch)
+        to <output_dir>/evaluations.jsonl (output_dir set by the runner; else $MALBO_EVAL_LOG_DIR or cwd)."""
+        rep = self.last_cost_report or {}
+        rec = {'config_index': i, 'accuracy': accuracy, 'cost_objective': cost,
+               'cost_source': 'pool_aa_prices' if rep else 'fallback_cost_estimator',
+               'config': {r: {'model_id': c['model_id'], 'pool_option': c.get('pool', {}).get('name'),
+                              'reasoning_effort': c.get('reasoning_effort')} for r, c in config_dict.items()},
+               'cost_report': rep}
+        if rep:
+            print(f"   💰 aa_cost=${rep['aa_cost']:.4f} go_expected=${rep['go_expected']:.4f} go_list_cost=${rep['go_list_cost']:.4f} "
+                  f"go_allowance=${rep['go_allowance']:.4f} {'⚠️ MISMATCH >2%' if rep['mismatch'] else 'consistent'}")
+        d = Path(self.output_dir or os.getenv('MALBO_EVAL_LOG_DIR') or '.')
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            with open(d / 'evaluations.jsonl', 'a') as f:
+                f.write(json.dumps(rec, default=str) + '\n')
+        except Exception as e:
+            print(f"   ⚠️ could not write evaluations.jsonl: {e}")
+
     def _fallback_evaluation(self, X_flat: np.ndarray) -> np.ndarray:
         """
         Fallback evaluation when executor is not available.
@@ -420,21 +501,23 @@ class GaiaBenchmarkEvaluator:
 
 def create_gaia_evaluator(llm_data: np.ndarray, llm_names: List[str], 
                          feature_names: List[str], n_agents: int,
-                         supports_image: Optional[np.ndarray] = None) -> GaiaBenchmarkEvaluator:
+                         supports_image: Optional[np.ndarray] = None, config_path: Optional[str] = None,
+                         pool_df=None, pool_df_full=None, output_dir: Optional[str] = None) -> GaiaBenchmarkEvaluator:
     """
     Factory function to create a GAIA benchmark evaluator.
     
     This function provides a clean interface for creating the evaluator
     with the same signature as the simulated version.
     """
-    config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
+    config_path = config_path or os.path.join(os.path.dirname(__file__), 'config.yaml')
     return GaiaBenchmarkEvaluator(
         llm_data=llm_data,
         llm_names=llm_names,
         feature_names=feature_names,
         n_agents=n_agents,
         config_path=config_path,
-        supports_image=supports_image
+        supports_image=supports_image,
+        pool_df=pool_df, pool_df_full=pool_df_full, output_dir=output_dir
     )
 
 
