@@ -45,7 +45,6 @@ try:
 except abort.InfraAbort:
     pass
 assert calls["n"] == 1 and "t-B" in abort.failed_tasks()   # paused: the call is not even sent
-print("A ok: quota -> pause without retries, later calls stop at once")
 
 class FakeBR(Exception):
     status_code = 400
@@ -72,7 +71,6 @@ for n in range(3):
         assert n < 2 and type(e).__name__ == "BadRequestError"
 assert abort.reason() and abort.reason()["kind"] == "infra"
 abort.reset()
-print("A2 ok: stop rejected via BadRequestError -> dropped; the same 400 three times -> pause")
 
 # ---------------- B) evaluate_configuration pause + resume via question cache
 import optimization_interface as oi
@@ -128,7 +126,6 @@ try:
     oi.evaluate_configuration(cfg, run_name="t"); raise SystemExit("expected RuntimeError")
 except RuntimeError:
     pass
-print("B ok: a crash raises instead of returning (0 %, $0)")
 os.chdir(HERE); os.environ.pop("MALBO_QCACHE_DIR", None)
 
 # ---------------- C) MALBO evaluator pause handling
@@ -171,7 +168,6 @@ def fake_global(config_dict, i):
     seen.append(1); raise EvaluationPaused({'kind': 'infra', 'model': None, 'error': 'connection refused'})
 ev2._execute_real_benchmark = fake_global
 Y2 = ev2.evaluate_agent_system(X(pts)); assert np.isnan(Y2).all() and len(seen) == 1
-print("C ok: quota pause defers only points with that model; global pause defers all; paused points not logged")
 
 # ---------------- D) optimizer: exit 75 then resume in the same dir
 import torch
@@ -201,5 +197,3 @@ assert not torch.isnan(Yi).any() and Yi.shape == (16, 2)
 recs = [json.loads(l) for l in open(os.path.join(out, 'evaluations.jsonl'))]
 new = [r for r in recs[len(done1):] if not r.get('reused')]
 assert len(new) == len(prog['paused_points']), (len(new), prog['paused_points'])   # only the deferred points are evaluated
-print(f"D ok: first run {len(done1)} done + {len(prog['paused_points'])} deferred -> exit 75; resume evaluated only those")
-print("ALL PAUSE/RESUME TESTS PASSED")

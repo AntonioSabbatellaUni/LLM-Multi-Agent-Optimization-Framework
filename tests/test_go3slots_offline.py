@@ -2,8 +2,7 @@
 1) projection of random 15-d vectors -> per-role config (text_inspector == reformulator, efforts from the row, visual_qa fixed)
 1b) balanced initial design (seed 42): deterministic, balanced per slot, visual_qa slot restricted to image models; random mode selectable
 1c) llm_logger: thread-safe jsonl writes, retry backoff helper
-2) cost function on an existing llm_calls.jsonl: go_list_cost reproduced, aa_cost ratio ~2.15x (deepseek)
-   path: env LLM_CALLS (default /work/results/attachments_deepseek/llm_calls.jsonl)"""
+2) cost function on an existing llm_calls.jsonl (env LLM_CALLS, default /work/results/attachments_deepseek/llm_calls.jsonl)"""
 import os, sys
 import numpy as np
 sys.path.insert(0, os.getcwd())
@@ -24,7 +23,6 @@ assert ev.n_agents == 3 and data.shape[1] == 5 and ev.n_agents * data.shape[1] =
 rng = np.random.default_rng(0)
 for k in range(8):
     cfg = ev._complete_agent_configuration(ev._project_to_llm_configuration(rng.random(15), 5))
-    print(k, {r: (c['pool']['name'], c.get('reasoning_effort')) for r, c in ev._redact(cfg).items()})
     assert set(cfg) == {'manager', 'search_agent', 'text_inspector', 'reformulator', 'visual_qa'}
     assert cfg['text_inspector']['model_id'] == cfg['reformulator']['model_id'] and cfg['text_inspector']['pool'] == cfg['reformulator']['pool']
     for r in ('manager', 'search_agent', 'text_inspector'):
@@ -45,7 +43,6 @@ rows2, _ = design_pool_indices(n_init, 3, len(names), 42, 'balanced', slot_names
 rows3, _ = design_pool_indices(n_init, 3, len(names), 43, 'balanced', slot_names=ev.agent_roles)
 assert rows == rows2 and rows != rows3 and len(rows) == 16
 for sl, c in zip(ev.agent_roles, counts):
-    print('balanced counts', sl, sorted(c.values(), reverse=True), 'options used', len(c), 'of', len(names))
     assert sum(c.values()) == n_init and max(c.values()) == 1 and len(c) == n_init   # 16 points < 21 options: every option at most once
 assert len({tuple(r) for r in rows}) == 16 and len({r[0] for r in rows}) == 16 and len({r[1] for r in rows}) == 16
 assert len({tuple(sorted(c)) for c in counts}) >= 2      # slots are permuted independently
@@ -57,7 +54,6 @@ r4, c4 = design_pool_indices(20, 4, len(names), 42, 'balanced', slot_names=['man
 assert all(img[r[3]] for r in r4) and max(c4[3].values()) - min(c4[3].values()) <= 1
 rr, _ = design_pool_indices(16, 3, len(names), 42, 'random'); rr2, _ = design_pool_indices(16, 3, len(names), 42, 'random')
 assert rr == rr2 and len(rr) == 16
-print('first 3 design points:', [[names[i] for i in r] for r in rows[:3]])
 # --- 1b2) include_configs / warm_start_from: reused points count toward n_initial, no duplicates, X exactly as the projection's inputs
 import json, tempfile
 from botorch_optimization import plan_initial_design, load_reusable_results, BoTorchOptimizer
@@ -107,9 +103,8 @@ ev3 = create_gaia_evaluator(data, names, fn, 3, config_path=acp, pool_df=pool, p
 ev3.evaluate_agent_system = fake_eval
 Xw, Yw = BoTorchOptimizer(ev3, output_dir=os.path.join(tmp, 'new2'), warm_start_from=os.path.join(old, 'evaluations.jsonl'))._generate_initial_data(16)
 assert called[-1] == 15 and abs(float(Yw[0, 1]) + 1.25) < 1e-12      # warm_start_from alone: the one valid record is included
-print('include_configs / warm_start_from OK')
 # --- 1c) logger thread safety + backoff
-import threading, json, tempfile
+import threading
 from utils import llm_logger, retry
 d = tempfile.mkdtemp(); llm_logger.set_log_path(os.path.join(d, 'llm_calls.jsonl'))
 def w(k):
@@ -122,14 +117,11 @@ assert len(lines) == 400 and all(json.loads(l)['pad'] for l in lines)
 assert all(retry.llm_error_retryable(type('E', (Exception,), {'status_code': c})()) for c in (429, 500, 503)) and not retry.llm_error_retryable(type('E', (Exception,), {'status_code': 400})())
 assert retry.search_error_retryable(Exception('https://html.duckduckgo.com/html 202 Ratelimit')) and not retry.search_error_retryable(Exception('No results found!'))
 assert 1 <= retry.backoff_delay(1) <= 3.01 and retry.backoff_delay(10) <= 90
-print('threaded logging + retry helpers OK')
 
 from utils.pool_cost import evaluation_costs
 p = full[full.go_model_id == 'deepseek-v4.1-flash'].iloc[0]
 pr = ev._price_dict(p)
 rep = evaluation_costs(os.getenv('LLM_CALLS', '/work/results/attachments_deepseek/llm_calls.jsonl'),
                        {r: pr for r in ('manager', 'search_agent', 'text_inspector', 'reformulator', 'visual_qa')})
-print({k: v for k, v in rep.items() if k != 'per_role'})
 assert abs(rep['go_list_cost'] - rep['go_expected']) < 1e-9 * max(1, rep['go_list_cost']) or not rep['mismatch'], rep
-print('aa/go_list ratio', rep['aa_cost'] / rep['go_list_cost'])
 print('OFFLINE TEST OK')
