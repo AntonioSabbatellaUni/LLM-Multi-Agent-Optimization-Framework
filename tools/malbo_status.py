@@ -248,6 +248,18 @@ def render(d):
         add(f"!! GO PEAK HOURS now (weekday 01-04 / 06-10 UTC): deepseek/gemini cost x2 (ends in {dur(pk['seconds_to_change'])})", "bold red")
     elif pk["seconds_to_change"]:
         add(f"off-peak; next Go peak window (x2 deepseek/gemini) in {dur(pk['seconds_to_change'])}", "dim")
+    try:   # account-wide Go windows (GET /usage), cached 60 s
+        import subprocess, time as _t
+        g = globals().setdefault("_GO_USAGE", {"t": 0, "txt": ""})
+        if _t.time() - g["t"] > 60:
+            envf = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".env")
+            g["txt"] = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "go_usage.py"),
+                                       "--env", envf], capture_output=True, text=True, timeout=25).stdout.strip()
+            g["t"] = _t.time()
+        for line in g["txt"].splitlines():
+            add(line, "red" if "limited" in line else "dim")
+    except Exception:
+        pass
     add()
     add(f"Evaluations  {bar(d['evals_done'], d['n_initial'] or d['total_evals'])} initial design"
         + (f"   BO iterations {d['bo_iteration'] or 0}/{d['n_iterations']}" if d["n_iterations"] else ""), "bold")
