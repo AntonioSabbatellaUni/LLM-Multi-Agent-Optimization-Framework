@@ -1,0 +1,40 @@
+# GAIA subset report (seed 42, n 30)
+
+Rows in validation: 165; dropped: 31; remaining: 134 {'2': 70, '1': 46, '3': 18}
+Allocation: {'2': 16, '1': 10, '3': 4}; with attachment in subset: 11
+
+## Dropped tasks
+
+| task_id | Level | reason |
+|---|---|---|
+| `4b6bb5f7-f634-410e-815d-e673ab7f8632` | 1 | excluded: wrong_gold - gaia-verified category 'format-conflict' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `50ad0280-0819-4bd9-b275-5de32d3b5bcb` | 1 | excluded: wrong_gold - gaia-verified category 'format-conflict' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `72e110e7-464c-453c-a309-90a95aed6538` | 1 | excluded: remove - gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `9318445f-fe6a-4e1b-acbf-c68228c9906a` | 1 | excluded: remove - gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `cca530fc-4052-43b2-b130-b30968d8aa44` | 1 | excluded: remove - gaia-verified category 'multiple-valid' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `e142056d-56ab-4352-b091-b56054bd1359` | 1 | excluded: wrong_gold - gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `e1fc63a2-da7a-432f-be78-7c4a95598703` | 1 | excluded: hf_discussion - rounding inconsistency between question and annotation (1000 h vs 100 h) |
+| `08cae58d-4084-4616-b6dd-dd6534e4825b` | 2 | excluded: wrong_gold - gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `0a3cd321-3e76-4622-911b-0fda2e5d6b1a` | 2 | excluded: remove - gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `0b260a57-3f3a-4405-9f29-6d7a1012dbfb` | 2 | excluded: remove - gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `0bb3b44a-ede5-4db5-a520-4e844b0079c5` | 2 | excluded: remove - gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `14569e28-c88c-43e4-8c32-097d35b9a67d` | 2 | excluded: wrong_gold - gaia-verified category 'gold-wrong' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `20194330-9976-4043-8632-f8485c6c71b2` | 2 | excluded: remove - gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `2a649bb1-795f-4a01-b3be-9a01868dae73` | 2 | excluded: remove - gaia-verified category 'gold-wrong' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `48eb8242-1099-4c26-95d4-ef22b002457a` | 2 | excluded: remove - gaia-verified category 'gold-wrong' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `4d51c4bf-4b0e-4f3d-897b-3f6687a7d9f2` | 2 | excluded: hf_discussion - gold (8) disputed vs proposed 4 for even-numbered west-facing houses; thread still open |
+| `6b078778-0b90-464d-83f6-59511c811b01` | 2 | excluded: hf_discussion - gold 'Alfonso Visconti' vs 'Alfonso Cardinal Visconti' (name mismatch) |
+| `7a4a336d-dcfa-45a0-b014-824c7619e8de` | 2 | excluded: wrong_gold - gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `7dd30055-0198-452e-8c25-f73dbe27dcb8` | 2 | excluded: hf_discussion - rounding ambiguity of the gold (1.456 vs 1.46 Angstrom); thread closed |
+| `9f41b083-683e-4dcf-9185-ccfeaa88fa45` | 2 | excluded: remove - gaia-verified category 'gold-wrong' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `a7feb290-76bb-4cb7-8800-7edaf7954f2f` | 2 | excluded: remove - gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `ded28325-3447-4c56-860f-e497d6fb3577` | 2 | excluded: wrong_gold - gaia-verified category 'gold-wrong' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `f0f46385-fc03-4599-b5d3-f56496c3e69f` | 2 | excluded: wrong_gold - gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `00d579ea-0889-4fd9-a771-2c8d79835c8d` | 3 | excluded: remove - gaia-verified category 'gold-wrong' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `384d0dd8-e8a4-4cfe-963c-d37f256e7662` | 3 | excluded: remove - gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `5f982798-16b9-4051-ab57-cfc7ebdb2a91` | 3 | excluded: remove - gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `72c06643-a2fa-4186-aa5c-9ec33ae9b445` | 3 | excluded: remove - gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `8d46b8d6-b38a-47ff-ac74-cda14cf2d19b` | 3 | excluded: wrong_gold - gaia-verified category 'question-mismatch' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `ad2b4d70-9314-4fe6-bfbe-894a45f6055f` | 3 | excluded: remove - gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `bec74516-02fc-48dc-b202-55e78d0e17cf` | 3 | excluded: remove - gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream) |
+| `ebbc1f13-d24d-40df-9068-adcf735b4240` | 3 | excluded: remove - gaia-verified category 'source-changed' (gold/defect text deliberately not copied; see errata.json upstream) |

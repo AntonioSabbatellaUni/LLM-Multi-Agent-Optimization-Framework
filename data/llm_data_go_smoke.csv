@@ -1,0 +1,3 @@
+Modello,MMLU,HellaSwag,HumanEval,GSM8K,GPQA_Diamond,AIME_2025,ARC,TruthfulQA,AGIEval,BBH,MATH,MT_bench,Media_Totale,Costo_Input_1M,Costo_Output_1M,Costo_Blended_1M,Context_Window,Fonti,supports_image
+openai/deepseek-v4.1-flash,80.0,50.0,75.0,90.0,50.0,50.0,50.0,50.0,50.0,50.0,50.0,50.0,50.0,0.14,0.28,0.2,128K,placeholder (Go smoke pool),1
+openai/iceman-contributor-free,40.0,50.0,30.0,50.0,50.0,50.0,50.0,50.0,50.0,50.0,50.0,50.0,50.0,0.0,0.0,0.2,128K,placeholder (Go smoke pool),0

@@ -4,17 +4,25 @@
 architecture:
   name: "gaia_smolagents"
   description: "Real benchmark evaluation using GAIA dataset with SmolagentsLibrary"
-  # n_agents: 5  # Fixed architecture requirement
-  n_agents: 3 # for reducing the total dim of bo and the iteration necessary
+  # n_agents = number of OPTIMIZED roles = len(agent_roles) (+1 if optional_roles.visual_qa.enabled)
+  n_agents: 4
   
   # Agent role definitions (order matters for mapping)
   agent_roles:
     - "manager"
-    - "search_agent" 
-    # - "text_inspector"
-    # - "visual_qa"
+    - "search_agent"
+    - "text_inspector"
     - "reformulator"
-  
+
+  # Optional optimized roles (appended after agent_roles when enabled; n_agents then becomes len(agent_roles)+1).
+  # visual_qa needs an image-capable model: its candidate pool is restricted to pool-CSV rows with supports_image == 1
+  # (column filled from the OpenCode Go /models metadata, modalities.input contains "image").
+  # When disabled it stays fixed to env MALBO_VISUAL_QA_MODEL_ID (default openai/deepseek-v4.1-flash).
+  optional_roles:
+    visual_qa:
+      enabled: false
+      requires_column: "supports_image"
+
   # ALL required roles for complete system (including inactive ones)
   required_roles:
     - "manager"
@@ -43,7 +51,7 @@ evaluation:
 # Model configuration template
 model_config:
   default_model_class: "LiteLLMModel"  # Default model class for all agents
-  default_model_id: "openrouter/openai/gpt-4.1-mini"  # Default model for missing roles
+  default_model_id: "openai/deepseek-v4.1-flash"  # Default model for missing roles
   
   # Per-role model class overrides (if needed)
   role_specific_classes:
