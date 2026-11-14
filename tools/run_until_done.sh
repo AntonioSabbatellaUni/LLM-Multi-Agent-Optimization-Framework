@@ -27,8 +27,10 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
   if [ "$rc" != 75 ]; then echo "STOP: unexpected exit $rc (see malbo/$OUT/run_attempt_$attempt.log)"; exit "$rc"; fi
   if [ "$after" -gt "$before" ]; then noprog=0; else noprog=$((noprog+1)); fi
   if [ "$noprog" -ge "$MAX_NO_PROGRESS" ]; then echo "STOP: $noprog resumes without progress (monthly cap?)"; exit 76; fi
-  # account-wide Go limit: sleep until the reset the API announced (+5 min), else WAIT_S
-  wait=$(python3 -c "
+  # account-wide Go limit: ask GET /usage when every window is usable again; -1 = weekly/monthly exhausted -> stop
+  wait=$(python3 malbo/tools/go_usage.py --env .env --wait-seconds 2>/dev/null)
+  if [ "$wait" = "-1" ]; then echo "STOP: Go weekly/monthly limit exhausted ($(python3 malbo/tools/go_usage.py --env .env | tr '\n' ';'))"; exit 78; fi
+  if [ -z "$wait" ] || [ "$wait" = "0" ]; then wait=$(python3 -c "
 import json,sys
 from datetime import datetime,timezone
 try: p=json.load(open('malbo/$OUT/progress.json'))
@@ -39,7 +41,8 @@ for x in p.get('pauses') or []:
     if r:
         left=r-(datetime.now(timezone.utc)-datetime.fromisoformat(x['ts'])).total_seconds()
         best=left if best is None else max(best,left)
-print(int(max(300,best+300)) if best is not None else $WAIT_S)")
+print(int(max(300,best+300)) if best is not None else $WAIT_S)"); fi
+  python3 malbo/tools/go_usage.py --env .env 2>/dev/null
   echo "PAUSED -> sleeping ${wait}s before resuming (resume at $(date -u -v+${wait}S +%FT%TZ 2>/dev/null || date -u -d "+${wait} sec" +%FT%TZ))"
   sleep "$wait"
 done
