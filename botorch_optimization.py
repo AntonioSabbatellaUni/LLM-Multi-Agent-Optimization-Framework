@@ -8,6 +8,7 @@ import numpy as np
 import json
 import os
 import time
+from collections import Counter
 from typing import Dict, Any, Tuple
 from botorch.models import ModelListGP, SingleTaskGP
 from botorch.models.transforms.outcome import Standardize
@@ -19,6 +20,7 @@ from botorch.sampling.normal import SobolQMCNormalSampler
 from botorch.optim import optimize_acqf
 from botorch.fit import fit_gpytorch_mll
 from datetime import datetime
+from run_progress import update as _progress
 
 # Import from our existing files
 from data_processor_v2 import NumpyLLMEvaluator
@@ -53,13 +55,7 @@ def design_pool_indices(n_points, n_slots, n_llms, seed=42, mode="balanced", slo
         for a in allowed:
             cols.append([int(a[np.random.randint(0, len(a))]) for _ in range(n_points)])
     rows = [tuple(cols[s][k] for s in range(n_slots)) for k in range(n_points)]
-    counts = []
-    for s in range(n_slots):
-        c = {}
-        for x in cols[s]:
-            c[x] = c.get(x, 0) + 1
-        counts.append(c)
-    return rows, counts
+    return rows, [Counter(c) for c in cols]
 
 
 def load_reusable_results(sources):
@@ -138,13 +134,7 @@ def plan_initial_design(n_points, n_slots, llm_names, slot_names, seed=42, mode=
             if not fixed:
                 print(f"  warning: could not remove duplicate design row {k} (kept)")
     rows = inc + [tuple(r) for r in drawn]
-    counts = []
-    for s in range(n_slots):
-        c = {}
-        for r in rows:
-            c[r[s]] = c.get(r[s], 0) + 1
-        counts.append(c)
-    return rows, counts, len(inc)
+    return rows, [Counter(r[s] for r in rows) for s in range(n_slots)], len(inc)
 
 
 class BoTorchOptimizer:
@@ -297,23 +287,16 @@ class BoTorchOptimizer:
         Y_init = np.full((n_points, 2), np.nan)
         sources = []
         for k, r in enumerate(rows):
-            if k < n_inc:
-                key = tuple(sorted({sl: names[int(x)] for sl, x in zip(slot_names, r)}.items()))
-                rec = reusable.get(key)
-                if rec is not None:
-                    Y_init[k] = self.evaluator.reuse_evaluation(rec)
-                    sources.append(f"reused:{rec['_source']}")
-                    continue
+            key = tuple(sorted({sl: names[int(x)] for sl, x in zip(slot_names, r)}.items()))
+            rec = reusable.get(key)   # drawn points too: an earlier (paused) run of this design may have finished them
+            if rec is not None:
+                Y_init[k] = self.evaluator.reuse_evaluation(rec)
+                sources.append(f"reused:{rec['_source']}")
+            elif k < n_inc:
                 print(f"  included config {dict(key)} has no earlier result -> will be evaluated")
                 sources.append("included_evaluated")
             else:
-                key = tuple(sorted({sl: names[int(x)] for sl, x in zip(slot_names, r)}.items()))
-                rec = reusable.get(key)
-                if rec is not None:   # drawn point already evaluated by an earlier (paused) run of this design
-                    Y_init[k] = self.evaluator.reuse_evaluation(rec)
-                    sources.append(f"reused:{rec['_source']}")
-                else:
-                    sources.append("drawn")
+                sources.append("drawn")
         self._save_initial_design(rows, picks, sources)
         todo = [k for k in range(n_points) if np.isnan(Y_init[k, 0])]
         print(f"  initial design: {n_points - len(todo)} reused, {len(todo)} to evaluate")
@@ -321,7 +304,6 @@ class BoTorchOptimizer:
             Y_init[todo] = self.evaluator.evaluate_agent_system(X_init[todo])
         missing = [k for k in range(n_points) if np.isnan(Y_init[k]).any()]
         if missing:
-            from run_progress import update as _progress
             pauses = getattr(self.evaluator, 'pauses', [])
             _progress(self.output_dir, phase="paused", paused_points=missing, n_done=n_points - len(missing),
                       pauses=pauses, paused_at=datetime.now().astimezone().isoformat())
@@ -357,7 +339,6 @@ class BoTorchOptimizer:
         # Reproducibility: seed numpy/torch for the initial design and the BO phase
         np.random.seed(self.seed)
         torch.manual_seed(self.seed)
-        from run_progress import update as _progress
         _progress(output_dir, phase="initial_design" if not resume_from else "bo", n_initial=n_initial, n_iterations=n_iterations,
                   batch_size=q, seed=self.seed, initial_design=self.initial_design,
                   run_name=os.path.basename(str(output_dir).rstrip('/')) if output_dir else None,

@@ -21,6 +21,7 @@ from typing import List, Dict, Tuple, Optional
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 from data_processor_v2 import find_closest_llm_index
 from env_manager import env_manager
+from run_progress import update as _progress
 
 
 class EvaluationPaused(Exception):
@@ -78,17 +79,6 @@ def effective_slots(config: dict) -> Dict[str, List[str]]:
         if opt.get('enabled') and name not in slots:
             slots[name] = [name]
     return slots
-
-
-def effective_agent_roles(config: dict) -> List[str]:
-    """Names of the optimized slots (== roles when no linking is configured); len() = n_agents."""
-    return list(effective_slots(config))
-
-
-def load_architecture_roles(config_path: Optional[str] = None) -> List[str]:
-    config_path = config_path or os.path.join(os.path.dirname(__file__), 'config.yaml')
-    with open(config_path) as f:
-        return effective_agent_roles(yaml.safe_load(f))
 
 
 class GaiaBenchmarkEvaluator:
@@ -252,7 +242,6 @@ class GaiaBenchmarkEvaluator:
                     continue
 
                 # Step 2: Execute real benchmark
-                from run_progress import update as _progress
                 option_per_slot = {sl: config_dict[self.slots[sl][0]].get('pool', {}).get('name') or config_dict[self.slots[sl][0]]['model_id']
                                    for sl in self.agent_roles}
                 _t0 = time.time()
@@ -293,7 +282,6 @@ class GaiaBenchmarkEvaluator:
                     print(f"   ⏸️  paused (global): {e} -> deferring all remaining points")
                 if len(self.pauses) >= int(os.getenv('MALBO_MAX_PAUSES_PER_RUN', '4')):
                     self.stop_all = True   # many models failing in one run: probably not a per-model cap -> wait and resume
-                from run_progress import update as _progress
                 _progress(self.output_dir, last_pause=self.pauses[-1], exhausted_models=sorted(self.exhausted_models))
                 continue
             except Exception as e:
@@ -517,8 +505,7 @@ class GaiaBenchmarkEvaluator:
             raise EvaluationPaused({'kind': 'infra', 'model': None, 'error': f"{type(e).__name__}: {e}"}) from e
     
     def _log_evaluation(self, i: int, config_dict: Dict[str, Dict], accuracy: float, cost: float):
-        """Append one record per evaluation (config, accuracy, aa_cost / go_expected / go_list_cost / go_allowance, mismatch)
-        to <output_dir>/evaluations.jsonl (output_dir set by the runner; else $MALBO_EVAL_LOG_DIR or cwd)."""
+        """Append one record per evaluation to evaluations.jsonl."""
         rep = self.last_cost_report or {}
         rec = {'config_index': i, 'eval_index': self.eval_counter, 'wall_time_s': self.last_wall_time,
                'ts_end': datetime.now().astimezone().isoformat(),
@@ -530,6 +517,9 @@ class GaiaBenchmarkEvaluator:
         if rep:
             print(f"   💰 aa_cost=${rep['aa_cost']:.4f} go_expected=${rep['go_expected']:.4f} go_list_cost=${rep['go_list_cost']:.4f} "
                   f"go_allowance=${rep['go_allowance']:.4f} {'⚠️ MISMATCH >2%' if rep['mismatch'] else 'consistent'}")
+        self._append_record(rec)
+
+    def _append_record(self, rec: Dict):
         d = Path(self.output_dir or os.getenv('MALBO_EVAL_LOG_DIR') or '.')
         try:
             d.mkdir(parents=True, exist_ok=True)
@@ -539,8 +529,7 @@ class GaiaBenchmarkEvaluator:
             print(f"   ⚠️ could not write evaluations.jsonl: {e}")
 
     def reuse_evaluation(self, rec: Dict) -> np.ndarray:
-        """Y row [performance, cost] of an earlier evaluation record (from evaluations.jsonl), computed exactly as in
-        evaluate_agent_system; the record is copied into this run's evaluations.jsonl (reused=True, no eval_counter increment)."""
+        """Y row of an earlier record, computed as in evaluate_agent_system; copied to evaluations.jsonl with reused=True."""
         bi = self.config['botorch_integration']
         perf = float(rec['accuracy']) * bi['performance_normalization']['scale_factor']
         cost = float(rec['cost_objective'])
@@ -549,13 +538,7 @@ class GaiaBenchmarkEvaluator:
             cost = -10.0
         out = {k: v for k, v in rec.items() if k != '_source'}
         out.update(reused=True, reused_from=rec.get('_source'), reused_at=datetime.now().astimezone().isoformat())
-        d = Path(self.output_dir or os.getenv('MALBO_EVAL_LOG_DIR') or '.')
-        try:
-            d.mkdir(parents=True, exist_ok=True)
-            with open(d / 'evaluations.jsonl', 'a') as f:
-                f.write(json.dumps(out, default=str) + '\n')
-        except Exception as e:
-            print(f"   ⚠️ could not write evaluations.jsonl: {e}")
+        self._append_record(out)
         print(f"   ♻️ reused {rec['options']}: acc={rec['accuracy']:.1f}% aa_cost=${float(rec['cost_objective']):.4f} (from {rec.get('_source')})")
         return np.array([perf, cost], dtype=np.float64)
 
