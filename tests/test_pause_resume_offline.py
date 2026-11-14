@@ -47,6 +47,33 @@ except abort.InfraAbort:
 assert calls["n"] == 1 and "t-B" in abort.failed_tasks()   # paused: the call is not even sent
 print("A ok: quota -> pause without retries, later calls stop at once")
 
+class FakeBR(Exception):
+    status_code = 400
+FakeBR.__name__ = "BadRequestError"
+seen_stop = []
+def fake_stop(*a, **k):
+    seen_stop.append("stop" in k)
+    if "stop" in k:
+        raise FakeBR("litellm.BadRequestError: OpenAIException - stop: Responses does not support stop sequences")
+    return {"choices": [], "usage": None}
+litellm.completion = fake_stop; llm_logger._state["installed"] = False; llm_logger.install(); abort.reset()
+litellm.completion(model="openai/grok-4.7", messages=[], stop=["x"])
+assert seen_stop == [True, False] and "openai/grok-4.7" in llm_logger._NO_STOP
+litellm.completion(model="openai/grok-4.7", messages=[], stop=["x"]); assert seen_stop[-1] is False   # remembered
+def fake_400(*a, **k):
+    raise FakeBR("BadRequestError: unsupported value for reasoning_effort")
+litellm.completion = fake_400; llm_logger._state["installed"] = False; llm_logger.install(); abort.reset()
+for n in range(3):
+    try:
+        litellm.completion(model="openai/x", messages=[])
+    except abort.InfraAbort:
+        assert n == 2; break
+    except Exception as e:
+        assert n < 2 and type(e).__name__ == "BadRequestError"
+assert abort.reason() and abort.reason()["kind"] == "infra"
+abort.reset()
+print("A2 ok: stop rejected via BadRequestError -> dropped; the same 400 three times -> pause")
+
 # ---------------- B) evaluate_configuration pause + resume via question cache
 import optimization_interface as oi
 N = 8
