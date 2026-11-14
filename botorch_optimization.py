@@ -274,7 +274,11 @@ class BoTorchOptimizer:
         n_agents = self.evaluator.n_agents
         
         slot_names = list(getattr(self.evaluator, 'agent_roles', None) or [f"agent{i}" for i in range(n_agents)])
-        reusable = load_reusable_results(self.warm_start_from) if self.warm_start_from else {}
+        sources = [self.warm_start_from] if isinstance(self.warm_start_from, (str, os.PathLike)) else list(self.warm_start_from or [])
+        own = os.path.join(str(self.output_dir), "evaluations.jsonl") if getattr(self, "output_dir", None) else None
+        if own and os.path.exists(own) and own not in sources:
+            sources.append(own)   # resume in the same output dir: points finished by an earlier (paused) run are reused
+        reusable = load_reusable_results(sources) if sources else {}
         include = self.include_configs or [dict(k) for k in reusable]    # warm_start_from alone: reuse every valid earlier evaluation
         rows, picks, n_inc = plan_initial_design(n_points, n_agents, self.evaluator.llm_names, slot_names, self.seed, self.initial_design,
                                                  supports_image=getattr(self.evaluator, 'supports_image', None),
@@ -303,12 +307,29 @@ class BoTorchOptimizer:
                 print(f"  included config {dict(key)} has no earlier result -> will be evaluated")
                 sources.append("included_evaluated")
             else:
-                sources.append("drawn")
+                key = tuple(sorted({sl: names[int(x)] for sl, x in zip(slot_names, r)}.items()))
+                rec = reusable.get(key)
+                if rec is not None:   # drawn point already evaluated by an earlier (paused) run of this design
+                    Y_init[k] = self.evaluator.reuse_evaluation(rec)
+                    sources.append(f"reused:{rec['_source']}")
+                else:
+                    sources.append("drawn")
         self._save_initial_design(rows, picks, sources)
         todo = [k for k in range(n_points) if np.isnan(Y_init[k, 0])]
         print(f"  initial design: {n_points - len(todo)} reused, {len(todo)} to evaluate")
         if todo:
             Y_init[todo] = self.evaluator.evaluate_agent_system(X_init[todo])
+        missing = [k for k in range(n_points) if np.isnan(Y_init[k]).any()]
+        if missing:
+            from run_progress import update as _progress
+            pauses = getattr(self.evaluator, 'pauses', [])
+            _progress(self.output_dir, phase="paused", paused_points=missing, n_done=n_points - len(missing),
+                      pauses=pauses, paused_at=datetime.now().astimezone().isoformat())
+            print(f"\n⏸️  INITIAL DESIGN PAUSED: {n_points - len(missing)}/{n_points} points done, {len(missing)} deferred {missing}")
+            for p in pauses:
+                print(f"     {p.get('kind')} model={p.get('model')}: {str(p.get('error'))[:160]}")
+            print(f"   Resume: rerun the same command with MALBO_OUTPUT_DIR={self.output_dir} (finished points/questions are reused)")
+            raise SystemExit(75)
         
         # Convert to torch tensors
         X_init_torch = torch.tensor(X_init, dtype=self.dtype, device=self.device)

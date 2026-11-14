@@ -23,6 +23,15 @@ from data_processor_v2 import find_closest_llm_index
 from env_manager import env_manager
 
 
+class EvaluationPaused(Exception):
+    """An evaluation stopped on an infrastructure problem (Go quota / rate limit, provider down, search blocked, crash).
+    reason = {kind: 'quota'|'infra', model, error, ...}. Nothing is recorded for it; it is re-run (resumed) later."""
+
+    def __init__(self, reason):
+        self.reason = dict(reason or {})
+        super().__init__(f"{self.reason.get('kind')} model={self.reason.get('model')}: {str(self.reason.get('error'))[:200]}")
+
+
 
 @contextlib.contextmanager
 def isolated_executor_env(executor_root_path: Path):
@@ -216,10 +225,16 @@ class GaiaBenchmarkEvaluator:
             print("⚠️  Executor interface not available. Using fallback evaluation.")
             return self._fallback_evaluation(X_flat)
         
+        if not hasattr(self, 'exhausted_models'):
+            self.exhausted_models, self.stop_all, self.pauses = set(), False, []
         for i in range(q):
             print(f"\n--- Configuration {i+1}/{q} ---")
             
             try:
+                if self.stop_all:
+                    print("   ⏭️  deferred: evaluations paused (global problem)")
+                    results[i] = np.nan
+                    continue
                 # Step 1: Project continuous vector to real LLM configurations
                 config_dict = self._project_to_llm_configuration(X_flat[i], n_features)
                 print(f"   Mapped to: {self._redact(config_dict)}")
@@ -229,6 +244,12 @@ class GaiaBenchmarkEvaluator:
                 config_summary = ', '.join([f'{role}={cfg.get("pool", {}).get("name") or cfg["model_id"].split("/")[-1]}'
                                             f'(effort={cfg.get("reasoning_effort", "env")})' for role, cfg in config_dict.items()])
                 print(f"   Complete config: {config_summary}")
+
+                used = {c['model_id'] for c in config_dict.values()}
+                if used & self.exhausted_models:
+                    print(f"   ⏭️  deferred: uses quota-exhausted model(s) {sorted(used & self.exhausted_models)}")
+                    results[i] = np.nan
+                    continue
 
                 # Step 2: Execute real benchmark
                 from run_progress import update as _progress
@@ -258,6 +279,23 @@ class GaiaBenchmarkEvaluator:
                 _progress(self.output_dir, evals_done=self.eval_counter)
                 print(f"   📊 Normalized: {normalized_performance:.3f} performance, {normalized_cost:.3f} cost")
                 
+            except EvaluationPaused as e:
+                results[i] = np.nan
+                r = e.reason
+                self.pauses.append(dict(r, config_index=i, ts=datetime.now().astimezone().isoformat()))
+                m = r.get('model')
+                if r.get('kind') == 'quota' and m:
+                    self.exhausted_models.add(m if '/' in m else f"openai/{m}")
+                    self.exhausted_models.add(m)
+                    print(f"   ⏸️  paused: quota/rate limit on {m} -> deferring every point that uses it, continuing with the others")
+                else:
+                    self.stop_all = True
+                    print(f"   ⏸️  paused (global): {e} -> deferring all remaining points")
+                if len(self.pauses) >= int(os.getenv('MALBO_MAX_PAUSES_PER_RUN', '4')):
+                    self.stop_all = True   # many models failing in one run: probably not a per-model cap -> wait and resume
+                from run_progress import update as _progress
+                _progress(self.output_dir, last_pause=self.pauses[-1], exhausted_models=sorted(self.exhausted_models))
+                continue
             except Exception as e:
                 print(f"   ❌ Evaluation failed: {e}")
                 print(f"   🔄 Using fallback values")
@@ -433,6 +471,8 @@ class GaiaBenchmarkEvaluator:
         try:
             # We need to ensure the executor environment is isolated
             # to avoid conflicts with other modules or imports.
+            if self.output_dir:
+                os.environ['MALBO_QCACHE_DIR'] = str((Path(self.output_dir) / 'qcache').resolve())   # per-question resume cache
             with isolated_executor_env(self.executor_root_path):
                 from optimization_interface import evaluate_configuration
 
@@ -468,12 +508,13 @@ class GaiaBenchmarkEvaluator:
             return accuracy, cost
 
         except Exception as e:
-            print(f"  ❌ Error during benchmark execution: {e}")
             import traceback
+            if type(e).__name__ == 'EvaluationPaused':   # from optimization_interface (utils.abort)
+                raise EvaluationPaused(getattr(e, 'reason', {})) from e
+            print(f"  ❌ Error during benchmark execution: {e}")
             traceback.print_exc() # Print full traceback for debugging
-
-            # Return penalty values
-            return 0.0, 100.0
+            # no penalty point (it would be a fake observation for the GP): pause, the point is re-run on resume
+            raise EvaluationPaused({'kind': 'infra', 'model': None, 'error': f"{type(e).__name__}: {e}"}) from e
     
     def _log_evaluation(self, i: int, config_dict: Dict[str, Dict], accuracy: float, cost: float):
         """Append one record per evaluation (config, accuracy, aa_cost / go_expected / go_list_cost / go_allowance, mismatch)

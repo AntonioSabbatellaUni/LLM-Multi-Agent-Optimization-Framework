@@ -121,7 +121,7 @@ def create_timestamp_folder(base_name: str, architecture_name: str) -> str:
     """Create a timestamp-based output folder with architecture info."""
     now = datetime.now()
     timestamp = now.strftime("%b_%d_%H_%M").lower()
-    output_dir = f"outputs/{timestamp}_{base_name}_{architecture_name}"
+    output_dir = os.getenv("MALBO_OUTPUT_DIR") or f"outputs/{timestamp}_{base_name}_{architecture_name}"   # fixed dir = resume
     os.makedirs(output_dir, exist_ok=True)
     print(f"📁 Created output directory: {output_dir}")
     return output_dir
