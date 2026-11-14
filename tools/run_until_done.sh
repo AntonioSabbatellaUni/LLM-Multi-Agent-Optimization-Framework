@@ -27,7 +27,20 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
   if [ "$rc" != 75 ]; then echo "STOP: unexpected exit $rc (see malbo/$OUT/run_attempt_$attempt.log)"; exit "$rc"; fi
   if [ "$after" -gt "$before" ]; then noprog=0; else noprog=$((noprog+1)); fi
   if [ "$noprog" -ge "$MAX_NO_PROGRESS" ]; then echo "STOP: $noprog resumes without progress (monthly cap?)"; exit 76; fi
-  echo "PAUSED -> sleeping ${WAIT_S}s before resuming"
-  sleep "$WAIT_S"
+  # account-wide Go limit: sleep until the reset the API announced (+5 min), else WAIT_S
+  wait=$(python3 -c "
+import json,sys
+from datetime import datetime,timezone
+try: p=json.load(open('malbo/$OUT/progress.json'))
+except Exception: print($WAIT_S); sys.exit()
+best=None
+for x in p.get('pauses') or []:
+    r=x.get('resets_in_s')
+    if r:
+        left=r-(datetime.now(timezone.utc)-datetime.fromisoformat(x['ts'])).total_seconds()
+        best=left if best is None else max(best,left)
+print(int(max(300,best+300)) if best is not None else $WAIT_S)")
+  echo "PAUSED -> sleeping ${wait}s before resuming (resume at $(date -u -v+${wait}S +%FT%TZ 2>/dev/null || date -u -d "+${wait} sec" +%FT%TZ))"
+  sleep "$wait"
 done
 echo "STOP: max attempts"; exit 77
