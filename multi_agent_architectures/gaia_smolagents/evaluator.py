@@ -540,7 +540,7 @@ class GaiaBenchmarkEvaluator:
         out.update(reused=True, reused_from=rec.get('_source'), reused_at=datetime.now().astimezone().isoformat())
         own = Path(self.output_dir or os.getenv('MALBO_EVAL_LOG_DIR') or '.') / 'evaluations.jsonl'
         copies = [json.loads(l) for l in own.read_text().splitlines() if l.strip()] if own.exists() else []
-        if not any(c.get('reused') and c.get('options') == rec['options'] for c in copies):   # resume: copy only once
+        if not any(c.get('options') == rec['options'] for c in copies):   # resume: already in this run's log
             self._append_record(out)
         print(f"   ♻️ reused {rec['options']}: acc={rec['accuracy']:.1f}% aa_cost=${float(rec['cost_objective']):.4f} (from {rec.get('_source')})")
         return np.array([perf, cost], dtype=np.float64)
