@@ -248,16 +248,35 @@ def render(d):
         add(f"!! GO PEAK HOURS now (weekday 01-04 / 06-10 UTC): deepseek/gemini cost x2 (ends in {dur(pk['seconds_to_change'])})", "bold red")
     elif pk["seconds_to_change"]:
         add(f"off-peak; next Go peak window (x2 deepseek/gemini) in {dur(pk['seconds_to_change'])}", "dim")
-    try:   # account-wide Go windows (GET /usage), cached 60 s
-        import subprocess, time as _t
-        g = globals().setdefault("_GO_USAGE", {"t": 0, "txt": ""})
+    try:   # account-wide Go windows (GET /usage) for every key (.env, .env.go2, ...), cached 60 s
+        import subprocess, time as _t, glob as _g, json as _j
+        g = globals().setdefault("_GO_USAGE", {"t": 0, "u": []})
+        root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
         if _t.time() - g["t"] > 60:
-            envf = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".env")
-            g["txt"] = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "go_usage.py"),
-                                       "--env", envf], capture_output=True, text=True, timeout=25).stdout.strip()
+            g["u"] = []
+            for envf in sorted(_g.glob(os.path.join(root, ".env")) + _g.glob(os.path.join(root, ".env.go*"))):
+                r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "go_usage.py"), "--env", envf],
+                                   capture_output=True, text=True, timeout=25).stdout.strip()
+                rj = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "go_usage.py"), "--env", envf,
+                                     "--json"], capture_output=True, text=True, timeout=25).stdout.strip()
+                g["u"].append((os.path.basename(envf), r, _j.loads(rj) if rj else {}))
             g["t"] = _t.time()
-        for line in g["txt"].splitlines():
-            add(line, "red" if "limited" in line else "dim")
+        # $ left per key: monthly allowance MALBO_GO_MONTHLY (default 52), weekly = 50%, 5-hour = 20% of it
+        M = float(os.getenv("MALBO_GO_MONTHLY", "52")); share = {"rolling": 0.2, "weekly": 0.5, "monthly": 1.0}
+        al = [float(e["go_allowance"]) for e in d["evals"] if e.get("go_allowance")]
+        per = sum(al) / len(al) if al else None
+        now_t = week_t = 0.0
+        for name, txt, u in g["u"]:
+            add(f"-- key {name}", "dim")
+            for line in txt.splitlines():
+                add("  " + line, "red" if "limited" in line else "dim")
+            left = {k: (0.0 if w.get("status") != "ok" else M * share.get(k, 1) * (1 - float(w.get("percent") or 0) / 100))
+                    for k, w in u.items()}
+            if left:
+                now_t += min(left.values()); week_t += min(left.get("weekly", 0), left.get("monthly", 0))
+        if per:
+            add(f"Go capacity: now ${now_t:.2f} (~{now_t / per:.1f} points)   until weekly reset ${week_t:.2f} (~{week_t / per:.1f} points)"
+                f"   at ${per:.2f} allowance/point (mean of completed)", "bold")
     except Exception:
         pass
     add()
