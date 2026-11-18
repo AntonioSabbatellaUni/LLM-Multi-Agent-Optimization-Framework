@@ -79,7 +79,7 @@ def main():
             if min(abs(exact - rec["accuracy"]), abs(relaxed - rec["accuracy"])) > 1e-6:   # stored by an exact or a relaxed run
                 print(f"  ⚠️ stored {rec['accuracy']:.1f} != exact {exact:.1f} / relaxed {relaxed:.1f} for {o}"); problems += 1
             out = {k: v for k, v in rec.items()}
-            out.update(accuracy=relaxed, accuracy_exact=exact, accuracy_stored=rec["accuracy"], accuracy_first_line=first, scorer="relaxed_v2",
+            out.update(accuracy=relaxed, accuracy_exact=exact, accuracy_stored=rec["accuracy"], accuracy_first_line=first, scorer="relaxed_v3",
                        rescored_from=os.path.join(src, "evaluations.jsonl"), n_answers_found=len(rows))
             written.append(out)
             print(f"  {o['manager']:32s} {o['search_agent']:32s} {o['docs']:32s} exact {rec['accuracy']:5.1f} -> relaxed {relaxed:5.1f}  (first line {first:5.1f})"

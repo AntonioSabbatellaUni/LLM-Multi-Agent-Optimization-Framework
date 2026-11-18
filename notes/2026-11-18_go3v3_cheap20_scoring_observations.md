@@ -100,7 +100,16 @@ Every answer still wrong under the relaxed scorer was checked by hand (design, f
 - **Alias added (relaxed_v2):** `ANSWER_ALIASES` in `scripts/gaia_scorer.py` accepts `Russo-German Legion` for `Russian-German Legion`.
   Both are English names of the same unit. D7 (glm / glm / luna) goes from 60% to 65%. Aliases are hand-reviewed judgment calls;
   keep the list short.
-- **Kept wrong:** q17 `2017 Komo Mai Drive 900000` (right price with the address in front: extra text, same rule as answer + explanation).
+- **Per-question aliases (relaxed_v3, `TASK_ALIASES` keyed by task id):**
+  - q10 Box Office Mojo: `3` accepted. The live 2020 lists (read on 2026-11-18) share 3 titles in the two top 10s
+    (Bad Boys for Life, Sonic the Hedgehog, Dolittle); the ground truth `6` reflects older lists. 14 of 16 configurations
+    answered `3`. Date-dependent: re-check before reusing this subset later.
+  - q17 Pearl City: `2017 Komo Mai Drive 900000` accepted. The question asks which home sold for more *and* the price, so naming
+    the home with the price answers it fully (an earlier draft of this note had it as "extra text").
+- Every other content error was checked against the question text and is a true error (q1 actor vs character name, q4, q5,
+  q8, q9 USGS zip, q11 geometry, q12, q14 `564.0` from C = 149 instead of 150, q15 `Tennessee militia`, q18, q19).
+- Effect: most points gain 5–15 points of accuracy (q10 alone gives +5 to every configuration that answered `3`). The new
+  maximum is D15 (glm / deepseek / luna) at 80%.
 - No other scorer problems: the remaining wrong answers are wrong content (`3` for `6`, `cute` for `fluffy`, `563.6` for `563.9`,
   `Nietzsche` for `Kleinpaul`, …), answer + explanation, reasoning text, or empty.
 
