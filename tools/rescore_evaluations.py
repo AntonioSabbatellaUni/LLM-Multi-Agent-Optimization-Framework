@@ -3,7 +3,7 @@ to warm-start a run that uses MALBO_SCORER=relaxed. The source files are only re
 
 Per-question answers come from <src>/qcache (config.json + jsonl), or, for a record with `derived_from`, from that
 evaluation's session questions.jsonl restricted to the task ids file. A question with no saved answer (timeout, error)
-counts as wrong, as in the original score. The exact-match score is recomputed too and must equal the stored accuracy.
+counts as wrong, as in the original score. The exact-match score is recomputed too; the stored accuracy must equal the exact or the relaxed one.
 
   python tools/rescore_evaluations.py outputs/go3_check30_sub20 outputs/go3v3_cheap20 --out outputs/go3v3_cheap20_rescored
 """
@@ -51,6 +51,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("sources", nargs="+")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--include-reused", action="store_true", help="also rescore reused copies (e.g. the warm-started design of a run)")
     ap.add_argument("--force", action="store_true", help="overwrite an existing output file")
     ap.add_argument("--n", type=int, default=20, help="questions per evaluation (missing answers count as wrong)")
     a = ap.parse_args()
@@ -63,7 +64,7 @@ def main():
         answers = qcache_answers(src)
         for line in open(os.path.join(src, "evaluations.jsonl")):
             rec = json.loads(line)
-            if rec.get("reused") or rec.get("accuracy") is None:
+            if rec.get("accuracy") is None or (rec.get("reused") and not a.include_reused):
                 continue
             o = rec["options"]
             if rec.get("derived_from"):
@@ -75,10 +76,10 @@ def main():
                 continue
             rs = [rescore(r) for r in rows.values()]
             exact, relaxed, first = (100 * sum(r[k] for r in rs) / n for k in ("is_correct_exact", "is_correct", "is_correct_first_line"))
-            if abs(exact - rec["accuracy"]) > 1e-6:
-                print(f"  ⚠️ exact score {exact:.1f} != stored {rec['accuracy']:.1f} for {o}"); problems += 1
+            if min(abs(exact - rec["accuracy"]), abs(relaxed - rec["accuracy"])) > 1e-6:   # stored by an exact or a relaxed run
+                print(f"  ⚠️ stored {rec['accuracy']:.1f} != exact {exact:.1f} / relaxed {relaxed:.1f} for {o}"); problems += 1
             out = {k: v for k, v in rec.items()}
-            out.update(accuracy=relaxed, accuracy_exact=rec["accuracy"], accuracy_first_line=first, scorer="relaxed_v1",
+            out.update(accuracy=relaxed, accuracy_exact=exact, accuracy_stored=rec["accuracy"], accuracy_first_line=first, scorer="relaxed_v1",
                        rescored_from=os.path.join(src, "evaluations.jsonl"), n_answers_found=len(rows))
             written.append(out)
             print(f"  {o['manager']:32s} {o['search_agent']:32s} {o['docs']:32s} exact {rec['accuracy']:5.1f} -> relaxed {relaxed:5.1f}  (first line {first:5.1f})"
