@@ -91,7 +91,33 @@ column next to the current accuracy.
 5. **Leakage.** In the web search and page-visit tools, block `huggingface.co/datasets/gaia-benchmark`, dataset mirrors
    and pages that publish GAIA answers. Re-check the 9 records above by reading their transcripts.
 
-## 6. Data
+## 6. Relaxed scorer: final review before the clean run (relaxed_v2)
+
+Every answer still wrong under the relaxed scorer was checked by hand (design, first run, BO iterations).
+
+- Accepted by relaxed but not by exact: 4 answers, all legitimate. `100 million` (q18), `Russian–German Legion` with an en dash (q15, ×2),
+  and `Russo-German Legion` (q15).
+- **Alias added (relaxed_v2):** `ANSWER_ALIASES` in `scripts/gaia_scorer.py` accepts `Russo-German Legion` for `Russian-German Legion`.
+  Both are English names of the same unit. D7 (glm / glm / luna) goes from 60% to 65%. Aliases are hand-reviewed judgment calls;
+  keep the list short.
+- **Kept wrong:** q17 `2017 Komo Mai Drive 900000` (right price with the address in front: extra text, same rule as answer + explanation).
+- No other scorer problems: the remaining wrong answers are wrong content (`3` for `6`, `cute` for `fluffy`, `563.6` for `563.9`,
+  `Nietzsche` for `Kleinpaul`, …), answer + explanation, reasoning text, or empty.
+
+### Pipeline problems found (not scorer problems; not fixed, kept for comparability)
+
+1. **Output cap (`max_tokens` 32768) hit:** 33 of 12,976 LLM calls ended with `finish_reason=length`, over about 18 questions.
+   The harmful case is the **reformulator**: 9 capped calls (deepseek@max 5, minimax-m3 2, mimo 2) on 5 questions. The model
+   spends the whole budget reasoning, the answer is cut and the prediction is **empty**: 3 of the 5 empty predictions have no
+   error and two reformulator calls of exactly 32768 output tokens each. (The other 2 empty predictions are 30-minute timeouts.)
+   Possible fix for a later run: on `finish_reason=length` in the reformulator, retry once with low reasoning effort, or give the
+   reformulator a lower effort by default.
+2. **Reformulator continues the agent instead of answering:** 37 of the 39 "no final answer" cases come from a reformulator call
+   that returned a continuation of the agent transcript (`Thought: …`, `<code>`, `# Approach`, `I'll continue …`), mostly
+   glm@max. The reformulator sees the memory as a conversation and imitates it. Possible fix for a later run: send the memory as
+   one quoted user message and ask for `FINAL ANSWER: …` only, then extract after the marker. This changes the prompt, so not now.
+
+## 7. Data
 
 - Question × configuration matrix and per-model breakdowns were computed with throw-away scripts on the 2019 host. They
   can be regenerated from the question cache with no API calls.
