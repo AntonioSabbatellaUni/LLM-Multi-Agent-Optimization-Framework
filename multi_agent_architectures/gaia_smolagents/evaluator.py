@@ -514,6 +514,7 @@ class GaiaBenchmarkEvaluator:
                'config': {r: {'model_id': c['model_id'], 'pool_option': c.get('pool', {}).get('name'),
                               'reasoning_effort': c.get('reasoning_effort')} for r, c in config_dict.items()},
                'cost_report': rep}
+        rec.update(getattr(self, 'record_extra', None) or {})   # e.g. bo_iteration
         if rep:
             print(f"   💰 aa_cost=${rep['aa_cost']:.4f} go_expected=${rep['go_expected']:.4f} go_list_cost=${rep['go_list_cost']:.4f} "
                   f"go_allowance=${rep['go_allowance']:.4f} {'⚠️ MISMATCH >2%' if rep['mismatch'] else 'consistent'}")
@@ -538,7 +539,10 @@ class GaiaBenchmarkEvaluator:
             cost = -10.0
         out = {k: v for k, v in rec.items() if k != '_source'}
         out.update(reused=True, reused_from=rec.get('_source'), reused_at=datetime.now().astimezone().isoformat())
-        self._append_record(out)
+        own = Path(self.output_dir or os.getenv('MALBO_EVAL_LOG_DIR') or '.') / 'evaluations.jsonl'
+        copies = [json.loads(l) for l in own.read_text().splitlines() if l.strip()] if own.exists() else []
+        if not any(c.get('options') == rec['options'] for c in copies):   # resume: already in this run's log
+            self._append_record(out)
         print(f"   ♻️ reused {rec['options']}: acc={rec['accuracy']:.1f}% aa_cost=${float(rec['cost_objective']):.4f} (from {rec.get('_source')})")
         return np.array([perf, cost], dtype=np.float64)
 

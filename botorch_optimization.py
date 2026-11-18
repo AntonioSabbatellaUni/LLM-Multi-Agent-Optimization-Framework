@@ -9,7 +9,7 @@ import json
 import os
 import time
 from collections import Counter
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, List, Tuple
 from botorch.models import ModelListGP, SingleTaskGP
 from botorch.models.transforms.outcome import Standardize
 from gpytorch.mlls.exact_marginal_log_likelihood import ExactMarginalLogLikelihood
@@ -78,7 +78,9 @@ def load_reusable_results(sources):
             if not rec.get("options") or rec.get("accuracy") is None or (rec.get("cost_objective") or 0) >= 100:
                 continue
             rec["_source"] = pth
-            found[tuple(sorted(rec["options"].items()))] = rec
+            key = tuple(sorted(rec["options"].items()))
+            rec["_design"] = rec.get("bo_iteration") is None or found.get(key, {}).get("_design", False)   # BO points are not design points
+            found[key] = rec
     return found
 
 
@@ -269,7 +271,7 @@ class BoTorchOptimizer:
         if own and os.path.exists(own) and own not in sources:
             sources.append(own)   # resume in the same output dir: points finished by an earlier (paused) run are reused
         reusable = load_reusable_results(sources) if sources else {}
-        include = self.include_configs or [dict(k) for k in reusable]    # warm_start_from alone: reuse every valid earlier evaluation
+        include = self.include_configs or [dict(k) for k, r in reusable.items() if r["_design"]]    # warm_start_from alone: reuse every valid earlier evaluation
         rows, picks, n_inc = plan_initial_design(n_points, n_agents, self.evaluator.llm_names, slot_names, self.seed, self.initial_design,
                                                  supports_image=getattr(self.evaluator, 'supports_image', None),
                                                  include_configs=include)
@@ -400,13 +402,21 @@ class BoTorchOptimizer:
             # Save initial state
             if output_dir:
                 self._save_checkpoint(train_x, train_y, 0, output_dir)
-            iter_range = range(1, n_iterations + 1)
+            done_bo = self._finished_bo_points()   # resume after a pause: BO iterations already in evaluations.jsonl
+            for rec in done_bo:
+                x = self._x_from_options(rec['options'])
+                y = torch.tensor(self.evaluator.reuse_evaluation(rec)[None], dtype=self.dtype, device=self.device)
+                train_x, train_y = torch.cat([train_x, x]), torch.cat([train_y, y])
+                all_x.append(x); all_y.append(y)
+            iter_range = range(len(done_bo) + 1, n_iterations + 1)
 
         # Step 2: Bayesian Optimization loop
         for iteration in iter_range:
             iter_start_time = time.time()
             self.logger.info(f"\n🔄 Iteration {iteration}/{n_iterations}")
             _progress(output_dir, phase="bo", bo_iteration=iteration)
+            torch.manual_seed(self.seed + iteration)   # same data + same seed -> same candidate when an iteration is resumed
+            np.random.seed(self.seed + iteration)
             
             # Fit GP model
             gp_start_time = time.time()
@@ -462,7 +472,15 @@ class BoTorchOptimizer:
             eval_start_time = time.time()
             self.logger.info("  📈 Evaluating new candidates...")
             candidates_np = candidates.detach().cpu().numpy()
+            self.evaluator.record_extra, self.evaluator._last_option_per_slot = {'bo_iteration': iteration}, None
             new_y_np = self.evaluator.evaluate_agent_system(candidates_np)
+            if np.isnan(new_y_np).any():   # quota/infra pause: no fake observation for the GP, resume re-proposes this point
+                _progress(output_dir, phase="paused", pauses=getattr(self.evaluator, 'pauses', []),
+                          paused_at=datetime.now().astimezone().isoformat())
+                print(f"\n⏸️  BO PAUSED at iteration {iteration}/{n_iterations}; resume with the same MALBO_OUTPUT_DIR")
+                raise SystemExit(75)
+            if q == 1 and getattr(self.evaluator, '_last_option_per_slot', None):
+                candidates = self._x_from_options(self.evaluator._last_option_per_slot)   # GP data = evaluated pool point (as on resume)
             new_y = torch.tensor(new_y_np, dtype=self.dtype, device=self.device)
             eval_time = time.time() - eval_start_time
             
@@ -544,6 +562,32 @@ class BoTorchOptimizer:
         
         return results
     
+    def _x_from_options(self, options: Dict[str, str]) -> torch.Tensor:
+        """(1, d) feature vector of a pool configuration {slot: option}: the pool rows' features, one block per slot."""
+        names, data = list(self.evaluator.llm_names), self.evaluator.llm_data
+        x = np.concatenate([data[names.index(options[sl])] for sl in self.evaluator.agent_roles])
+        return torch.tensor(x[None], dtype=self.dtype, device=self.device)
+
+    def _finished_bo_points(self) -> List[Dict]:
+        """Original (not reused) records of finished BO iterations in this run's evaluations.jsonl, by iteration."""
+        own = os.path.join(str(self.output_dir), "evaluations.jsonl") if getattr(self, "output_dir", None) else None
+        if not own or not os.path.exists(own):
+            return []
+        recs = {}
+        for line in open(own):
+            try:
+                r = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if r.get("bo_iteration") is not None and not r.get("reused") and r.get("accuracy") is not None:
+                recs[r["bo_iteration"]] = r
+        out = []
+        for it in range(1, len(recs) + 1):   # contiguous iterations only
+            if it not in recs:
+                break
+            out.append(dict(recs[it], _source=own))
+        return out
+
     def _save_checkpoint(self, train_x: torch.Tensor, train_y: torch.Tensor, iteration: int, output_dir: str,
                         new_x: torch.Tensor = None, new_y: torch.Tensor = None):
         """

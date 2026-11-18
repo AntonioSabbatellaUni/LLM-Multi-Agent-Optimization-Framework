@@ -1,0 +1,117 @@
+{
+  "seed": 42,
+  "n": 20,
+  "split": "2023/validation",
+  "derived_from": "gaia_subset_seed42_n30.json",
+  "method": "random.Random(42).sample per (level, has_file) stratum of the n30 tasks, largest-remainder allocation",
+  "allocation": {
+    "L1": 5,
+    "L1+file": 2,
+    "L2": 7,
+    "L2+file": 4,
+    "L3": 1,
+    "L3+file": 1
+  },
+  "tasks": [
+    {
+      "task_id": "11af4e1a-5f45-467d-9aeb-46f4bb0bf034",
+      "level": 1,
+      "has_file": false
+    },
+    {
+      "task_id": "305ac316-eef6-4446-960a-92d80d542f82",
+      "level": 1,
+      "has_file": false
+    },
+    {
+      "task_id": "389793a7-ca17-4e82-81cb-2b3a2391b4b9",
+      "level": 1,
+      "has_file": true
+    },
+    {
+      "task_id": "50ec8903-b81f-4257-9450-1085afd2c319",
+      "level": 1,
+      "has_file": false
+    },
+    {
+      "task_id": "5188369a-3bbe-43d8-8b94-11558f909a08",
+      "level": 1,
+      "has_file": false
+    },
+    {
+      "task_id": "b816bfce-3d80-4913-a07d-69b752ce6377",
+      "level": 1,
+      "has_file": false
+    },
+    {
+      "task_id": "cffe0e32-c9a6-4c52-9877-78ceb4aaa9fb",
+      "level": 1,
+      "has_file": true
+    },
+    {
+      "task_id": "076c8171-9b3b-49b9-a477-244d2a532826",
+      "level": 2,
+      "has_file": true
+    },
+    {
+      "task_id": "08c0b6e9-1b43-4c2e-ae55-4e3fce2c2715",
+      "level": 2,
+      "has_file": false
+    },
+    {
+      "task_id": "17b5a6a3-bc87-42e8-b0fb-6ab0781ef2cc",
+      "level": 2,
+      "has_file": false
+    },
+    {
+      "task_id": "2dfc4c37-fec1-4518-84a7-10095d30ad75",
+      "level": 2,
+      "has_file": false
+    },
+    {
+      "task_id": "6359a0b1-8f7b-499b-9336-840f9ab90688",
+      "level": 2,
+      "has_file": true
+    },
+    {
+      "task_id": "65638e28-7f37-4fa7-b7b9-8c19bb609879",
+      "level": 2,
+      "has_file": false
+    },
+    {
+      "task_id": "67e8878b-5cef-4375-804e-e6291fdbe78a",
+      "level": 2,
+      "has_file": true
+    },
+    {
+      "task_id": "7b5377b0-3f38-4103-8ad2-90fe89864c04",
+      "level": 2,
+      "has_file": false
+    },
+    {
+      "task_id": "b4cc024b-3f5e-480e-b96a-6656493255b5",
+      "level": 2,
+      "has_file": false
+    },
+    {
+      "task_id": "b7f857e4-d8aa-4387-af2a-0e844df5b9d8",
+      "level": 2,
+      "has_file": true
+    },
+    {
+      "task_id": "f2feb6a4-363c-4c09-a804-0db564eafd68",
+      "level": 2,
+      "has_file": false
+    },
+    {
+      "task_id": "0512426f-4d28-49f0-be77-06d05daec096",
+      "level": 3,
+      "has_file": false
+    },
+    {
+      "task_id": "5b2a14e8-6e59-479c-80e3-4696e8980152",
+      "level": 3,
+      "has_file": true
+    }
+  ]
+}

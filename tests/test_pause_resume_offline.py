@@ -120,6 +120,14 @@ for par in (1, 4):
     rep = json.loads((Path(sd) / "cost_report.json").read_text())
     assert rep["n_questions_cached"] == 5 and rep["n_calls"] == 8, rep
     print(f"B ok (parallel={par}): paused at 5/8, resumed -> acc {acc:.1f}% cost ${cost:.2f} over 8 questions")
+# a question blocked forever (agent code waiting on the network) is cut at QUESTION_TIMEOUT_S and counted wrong
+import threading
+for f in qdir.glob("*"): f.unlink()
+oi.QUESTION_TIMEOUT_S, block = 1, threading.Event()
+oi.answer_single_question_with_tracking = lambda ex, *a, **k: (block.wait(30) if ex["task_id"] == "q2" else None) or fake_answer(ex, *a, **k)
+acc, cost, sd = oi.evaluate_configuration(cfg, run_name="t", concurrency=4)
+assert abs(acc - 37.5) < 1e-9 and "q2" in abort._state["cancelled"], acc   # q0,q4,q6 of 8 (q2 timed out)
+block.set(); oi.QUESTION_TIMEOUT_S = 1800; oi.answer_single_question_with_tracking = fake_answer
 # fake (0,0) on a crash is gone
 oi.load_gaia_dataset = lambda **k: (_ for _ in ()).throw(RuntimeError("dataset down"))
 try:
