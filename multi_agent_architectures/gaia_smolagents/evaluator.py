@@ -514,6 +514,7 @@ class GaiaBenchmarkEvaluator:
                'config': {r: {'model_id': c['model_id'], 'pool_option': c.get('pool', {}).get('name'),
                               'reasoning_effort': c.get('reasoning_effort')} for r, c in config_dict.items()},
                'cost_report': rep}
+        rec.update(getattr(self, 'record_extra', None) or {})   # e.g. bo_iteration
         if rep:
             print(f"   💰 aa_cost=${rep['aa_cost']:.4f} go_expected=${rep['go_expected']:.4f} go_list_cost=${rep['go_list_cost']:.4f} "
                   f"go_allowance=${rep['go_allowance']:.4f} {'⚠️ MISMATCH >2%' if rep['mismatch'] else 'consistent'}")
