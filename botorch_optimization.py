@@ -17,7 +17,7 @@ from botorch.acquisition.multi_objective.logei import qLogExpectedHypervolumeImp
 from botorch.utils.multi_objective.hypervolume import NondominatedPartitioning
 from botorch.utils.multi_objective.pareto import is_non_dominated
 from botorch.sampling.normal import SobolQMCNormalSampler
-from botorch.optim import optimize_acqf
+from botorch.optim import optimize_acqf, optimize_acqf_discrete
 from botorch.fit import fit_gpytorch_mll
 from datetime import datetime
 from run_progress import update as _progress
@@ -448,14 +448,20 @@ class BoTorchOptimizer:
                     sampler=sampler
                 )
                 
-                # Optimize acquisition function
-                candidates, acq_values = optimize_acqf(
-                    acq_function=acq_func,
-                    bounds=self.bounds,
-                    q=q,
-                    num_restarts=20,
-                    raw_samples=1024,
-                )
+                # Optimize acquisition function: over every real pool configuration when there are few enough
+                # (no continuous point that rounds to an already evaluated config), else continuous + projection
+                choices = self._all_configurations()
+                if choices is not None:
+                    candidates, acq_values = optimize_acqf_discrete(acq_function=acq_func, q=q, choices=choices, unique=True)
+                    self.logger.info(f"  🔢 Discrete acquisition over {len(choices)} pool configurations")
+                else:
+                    candidates, acq_values = optimize_acqf(
+                        acq_function=acq_func,
+                        bounds=self.bounds,
+                        q=q,
+                        num_restarts=20,
+                        raw_samples=1024,
+                    )
                 acq_time = time.time() - acq_start_time
                 
                 self.logger.info(f"  ✅ Found {q} new candidates")
@@ -567,6 +573,17 @@ class BoTorchOptimizer:
         names, data = list(self.evaluator.llm_names), self.evaluator.llm_data
         x = np.concatenate([data[names.index(options[sl])] for sl in self.evaluator.agent_roles])
         return torch.tensor(x[None], dtype=self.dtype, device=self.device)
+
+    def _all_configurations(self, max_configs: int = 50000):
+        """(n, d) tensor of every pool configuration (one pool row per slot; visual_qa slot only image-capable rows), or None if too many."""
+        import itertools
+        data, roles = self.evaluator.llm_data, list(self.evaluator.agent_roles)
+        img = getattr(self.evaluator, 'supports_image', None)
+        rows = [list(np.flatnonzero(img)) if (sl == 'visual_qa' and img is not None) else list(range(len(data))) for sl in roles]
+        if int(np.prod([len(r) for r in rows])) > max_configs:
+            return None
+        X = np.array([np.concatenate([data[i] for i in pick]) for pick in itertools.product(*rows)])
+        return torch.tensor(X, dtype=self.dtype, device=self.device)
 
     def _finished_bo_points(self) -> List[Dict]:
         """Original (not reused) records of finished BO iterations in this run's evaluations.jsonl, by iteration."""

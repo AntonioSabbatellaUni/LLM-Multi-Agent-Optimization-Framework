@@ -3,7 +3,7 @@
 # resume, reusing every finished point and question. Run on the 2019 host from ~/dev/malbo-revival:
 #   nohup malbo/tools/run_until_done.sh config.go3slots_reuse.yaml outputs/go3_init16 > go3_init16.driver.log 2>&1 &
 # Env: ENV_FILES (default .env; e.g. ".env .env.go2": several Go subscriptions, each file overrides the API key; the first
-# one whose limits are all ok is used, and a key that runs out is swapped for the next), WAIT_S (default 3600), MAX_ATTEMPTS (default 30), MAX_NO_PROGRESS (default 6 resumes without a new point/question).
+# one whose limits are all ok is used, and a key that runs out is swapped for the next), MALBO_SCORER (exact|relaxed), WAIT_S (default 3600), MAX_ATTEMPTS (default 30), MAX_NO_PROGRESS (default 6 resumes without a new point/question).
 set -u
 CONFIG=${1:?config}; OUT=${2:?output dir relative to malbo/}
 WAIT_S=${WAIT_S:-3600}; MAX_ATTEMPTS=${MAX_ATTEMPTS:-30}; MAX_NO_PROGRESS=${MAX_NO_PROGRESS:-6}
@@ -28,7 +28,7 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
   docker rm -f malbo-go3 >/dev/null 2>&1
   docker run --rm --name malbo-go3 --cpus 3 --memory 5g -v "$PWD":/work -w /work/malbo --env-file .env --env-file "$USED" \
     -e MPLBACKEND=Agg -e MALBO_API_BASE=https://opencode.ai/zen/go/v1 -e MALBO_MANAGER_MAX_STEPS=10 -e MALBO_SEARCH_MAX_STEPS=8 \
-    -e MALBO_PARALLEL_TASKS=${MALBO_PARALLEL_TASKS:-20} -e MALBO_OUTPUT_DIR="$OUT" \
+    -e MALBO_PARALLEL_TASKS=${MALBO_PARALLEL_TASKS:-20} -e MALBO_OUTPUT_DIR="$OUT" -e MALBO_SCORER=${MALBO_SCORER:-exact} \
     -e MALBO_EXTRA_HEADERS='{"x-opencode-session":"malbo-go3slots"}' \
     malbo-dev python run_multi_agent_optimization.py --config "$CONFIG" > "malbo/$OUT/run_attempt_$attempt.log" 2>&1
   rc=$?
